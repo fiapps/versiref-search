@@ -1,0 +1,35 @@
+version = 1
+revision = 3
+requires-python = ">=3.9"
+
+[[package]]
+name = "pyparsing"
+version = "3.3.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f3/91/9c6ee907786a473bf81c5f53cf703ba0957b23ab84c264080fb5a450416f/pyparsing-3.3.2.tar.gz", hash = "sha256:c777f4d763f140633dcb6d8a3eda953bf7a214dc4eff598413c070bcdc117cbc", size = 6851574, upload-time = "2026-01-21T03:57:59.36Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/10/bd/c038d7cc38edc1aa5bf91ab8068b63d4308c66c4c8bb3cbba7dfbc049f9c/pyparsing-3.3.2-py3-none-any.whl", hash = "sha256:850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d", size = 122781, upload-time = "2026-01-21T03:57:55.912Z" },
+]
+
+[[package]]
+name = "versiref"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyparsing" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7d/66/c75cf502cffc3ad3df62328cc4fcccbedbbf8af2d26d00e2a0e88615b967/versiref-0.1.0.tar.gz", hash = "sha256:7aaac03f7fe1b11a06f778d7d2a27788b5f6df88283d145bec289ec65f076032", size = 65299, upload-time = "2025-06-05T22:34:01.456Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/07/cdf4656a1d144f01c52924a9d7206a1c5b3f245aeb1310e0b43f0b4152a9/versiref-0.1.0-py3-none-any.whl", hash = "sha256:4e8aad9106f3f38adf289843a8cae057ddd0aa08078d32cb4c58a7a8a9f9c70c", size = 57572, upload-time = "2025-06-05T22:34:00.121Z" },
+]
+
+[[package]]
+name = "versiref-search"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "versiref" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "versiref", specifier = ">=0.1.0" }]

@@ -7,8 +7,13 @@ authors = [
     { name = "Fr. John Lawrence M. Polis", email = "emptier-sank-dose@duck.com" }
 ]
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+    "versiref>=0.1.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.9.28,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "versiref.search"
