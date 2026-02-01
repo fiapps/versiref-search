@@ -7,6 +7,8 @@ authors = [
     { name = "Fr. John Lawrence M. Polis", email = "emptier-sank-dose@duck.com" }
 ]
 requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
 dependencies = [
     "versiref>=0.1.0",
 ]
