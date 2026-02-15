@@ -9,5 +9,6 @@ wheels/
 # Virtual environments
 .venv
 
-# Documentation for reference by AI agents
+# For the use of AI agents
+.claude/
 docs/
