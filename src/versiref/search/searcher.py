@@ -83,8 +83,8 @@ def search_database(
 
             # Search for each verse range in the reference
             for verse_start, verse_end in ref.range_keys():
-                results = db.search_by_reference_range(verse_start, verse_end)
-                for content_id, block_text, char_start, char_end in results:
+                ref_results = db.search_by_reference_range(verse_start, verse_end)
+                for content_id, block_text, char_start, char_end in ref_results:
                     if content_id not in hits_by_block:
                         hits_by_block[content_id] = []
                     # Add hit if not already present
@@ -94,8 +94,8 @@ def search_database(
 
         # Search by string if provided
         if string_query:
-            results = db.search_by_string(string_query)
-            for content_id, block_text in results:
+            string_results = db.search_by_string(string_query)
+            for content_id, block_text in string_results:
                 if content_id not in hits_by_block:
                     hits_by_block[content_id] = []
                 # Find all occurrences of the string in the block
@@ -112,7 +112,7 @@ def search_database(
                     start = pos + 1
 
         # Build SearchResult objects
-        results = []
+        search_results: list[SearchResult] = []
         for content_id in sorted(hits_by_block.keys()):
             # Get content block
             block_info = db.get_content_by_id(content_id)
@@ -132,7 +132,7 @@ def search_database(
             # Sort hits by position
             hits = sorted(hits_by_block[content_id], key=lambda h: h.start_pos)
 
-            results.append(
+            search_results.append(
                 SearchResult(
                     block_id=content_id,
                     block_text=block_text,
@@ -141,7 +141,7 @@ def search_database(
                 )
             )
 
-        return results
+        return search_results
 
 
 def get_context(

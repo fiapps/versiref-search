@@ -25,7 +25,13 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "versiref.search"
 
+[tool.mypy]
+mypy_path = "src"
+namespace_packages = true
+explicit_package_bases = true
+
 [dependency-groups]
 dev = [
+    "mypy>=1.19.1",
     "ruff>=0.15.1",
 ]

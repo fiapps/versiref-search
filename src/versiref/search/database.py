@@ -141,6 +141,7 @@ class Database:
             (block_text, heading_level),
         )
         self.conn.commit()
+        assert cursor.lastrowid is not None
         return cursor.lastrowid
 
     def insert_reference(
@@ -173,6 +174,7 @@ class Database:
             (content_id, verse_start, verse_end, char_start, char_end),
         )
         self.conn.commit()
+        assert cursor.lastrowid is not None
         return cursor.lastrowid
 
     def search_by_reference_range(

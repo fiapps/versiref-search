@@ -1,6 +1,6 @@
 """Markdown parsing for versiref-search."""
 
-from typing import Optional
+from typing import Any, Optional
 import mistune
 from .models import BlockInfo
 
@@ -16,7 +16,7 @@ def parse_markdown(markdown_text: str) -> list[BlockInfo]:
     """
     # Create mistune markdown parser that returns AST
     markdown = mistune.create_markdown(renderer="ast")
-    tokens = markdown(markdown_text)
+    tokens: list[dict[str, Any]] = markdown(markdown_text)  # type: ignore[assignment]
 
     blocks = []
     block_id = 0  # We use 0-based IDs here; database will assign real IDs
@@ -34,7 +34,7 @@ def parse_markdown(markdown_text: str) -> list[BlockInfo]:
 
 
 def _extract_block(
-    token: dict, source_text: str
+    token: dict[str, Any], source_text: str
 ) -> tuple[Optional[str], Optional[int]]:
     """Extract text and heading level from a token.
 
@@ -64,7 +64,7 @@ def _extract_block(
 
     # Block quote
     elif token_type == "block_quote":
-        lines = []
+        lines: list[str] = []
         for child in token.get("children", []):
             child_text, _ = _extract_block(child, source_text)
             if child_text:
@@ -99,7 +99,7 @@ def _extract_block(
     return None, None
 
 
-def _extract_inline_text(children: list[dict]) -> str:
+def _extract_inline_text(children: list[dict[str, Any]]) -> str:
     """Extract text from inline elements (recursively).
 
     Args:
@@ -160,7 +160,7 @@ def _extract_inline_text(children: list[dict]) -> str:
     return "".join(parts)
 
 
-def _extract_list_text(token: dict) -> str:
+def _extract_list_text(token: dict[str, Any]) -> str:
     """Extract text from list tokens.
 
     Args:
@@ -198,9 +198,9 @@ def _extract_list_text(token: dict) -> str:
                     indented = "\n".join(f"  {line}" for line in nested.split("\n"))
                     parts.append(indented)
             else:
-                text, _ = _extract_block(child, "")
-                if text:
-                    parts.append(text)
+                other_text, _ = _extract_block(child, "")
+                if other_text:
+                    parts.append(other_text)
         return "\n".join(parts)
 
     return ""
