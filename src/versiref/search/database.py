@@ -89,8 +89,7 @@ class Database:
             raise RuntimeError("Database not connected")
 
         self.conn.execute(
-            "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
-            (key, value)
+            "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", (key, value)
         )
         self.conn.commit()
 
@@ -106,10 +105,7 @@ class Database:
         if not self.conn:
             raise RuntimeError("Database not connected")
 
-        cursor = self.conn.execute(
-            "SELECT value FROM metadata WHERE key = ?",
-            (key,)
-        )
+        cursor = self.conn.execute("SELECT value FROM metadata WHERE key = ?", (key,))
         row = cursor.fetchone()
         return row["value"] if row else None
 
@@ -125,7 +121,9 @@ class Database:
         cursor = self.conn.execute("SELECT key, value FROM metadata")
         return {row["key"]: row["value"] for row in cursor.fetchall()}
 
-    def insert_content(self, block_text: str, heading_level: Optional[int] = None) -> int:
+    def insert_content(
+        self, block_text: str, heading_level: Optional[int] = None
+    ) -> int:
         """Insert a content block.
 
         Args:
@@ -140,7 +138,7 @@ class Database:
 
         cursor = self.conn.execute(
             "INSERT INTO content (block_text, heading_level) VALUES (?, ?)",
-            (block_text, heading_level)
+            (block_text, heading_level),
         )
         self.conn.commit()
         return cursor.lastrowid
@@ -151,7 +149,7 @@ class Database:
         verse_start: int,
         verse_end: int,
         char_start: int,
-        char_end: int
+        char_end: int,
     ) -> int:
         """Insert a Bible reference index entry.
 
@@ -172,15 +170,13 @@ class Database:
             """INSERT INTO reference_index
                (content_id, verse_start, verse_end, char_start, char_end)
                VALUES (?, ?, ?, ?, ?)""",
-            (content_id, verse_start, verse_end, char_start, char_end)
+            (content_id, verse_start, verse_end, char_start, char_end),
         )
         self.conn.commit()
         return cursor.lastrowid
 
     def search_by_reference_range(
-        self,
-        query_start: int,
-        query_end: int
+        self, query_start: int, query_end: int
     ) -> list[tuple[int, str, int, int]]:
         """Search for content blocks containing references that overlap with query range.
 
@@ -204,7 +200,7 @@ class Database:
                JOIN content c ON r.content_id = c.id
                WHERE r.verse_start <= ? AND r.verse_end >= ?
                ORDER BY r.content_id, r.char_start""",
-            (query_end, query_start)
+            (query_end, query_start),
         )
         return [
             (row["content_id"], row["block_text"], row["char_start"], row["char_end"])
@@ -228,11 +224,13 @@ class Database:
                FROM content
                WHERE block_text LIKE ? COLLATE NOCASE
                ORDER BY id""",
-            (f"%{search_term}%",)
+            (f"%{search_term}%",),
         )
         return [(row["id"], row["block_text"]) for row in cursor.fetchall()]
 
-    def get_content_by_id(self, content_id: int) -> Optional[tuple[int, str, Optional[int]]]:
+    def get_content_by_id(
+        self, content_id: int
+    ) -> Optional[tuple[int, str, Optional[int]]]:
         """Get a content block by ID.
 
         Args:
@@ -246,15 +244,13 @@ class Database:
 
         cursor = self.conn.execute(
             "SELECT id, block_text, heading_level FROM content WHERE id = ?",
-            (content_id,)
+            (content_id,),
         )
         row = cursor.fetchone()
         return (row["id"], row["block_text"], row["heading_level"]) if row else None
 
     def get_content_range(
-        self,
-        start_id: int,
-        end_id: int
+        self, start_id: int, end_id: int
     ) -> list[tuple[int, str, Optional[int]]]:
         """Get a range of content blocks.
 
@@ -273,7 +269,7 @@ class Database:
                FROM content
                WHERE id >= ? AND id <= ?
                ORDER BY id""",
-            (start_id, end_id)
+            (start_id, end_id),
         )
         return [
             (row["id"], row["block_text"], row["heading_level"])
@@ -281,9 +277,7 @@ class Database:
         ]
 
     def get_preceding_heading(
-        self,
-        content_id: int,
-        heading_level: int
+        self, content_id: int, heading_level: int
     ) -> Optional[tuple[int, str]]:
         """Get the most recent heading at a specific level before a content block.
 
@@ -303,15 +297,12 @@ class Database:
                WHERE id < ? AND heading_level = ?
                ORDER BY id DESC
                LIMIT 1""",
-            (content_id, heading_level)
+            (content_id, heading_level),
         )
         row = cursor.fetchone()
         return (row["id"], row["block_text"]) if row else None
 
-    def get_all_preceding_headings(
-        self,
-        content_id: int
-    ) -> dict[int, tuple[int, str]]:
+    def get_all_preceding_headings(self, content_id: int) -> dict[int, tuple[int, str]]:
         """Get the most recent heading at each level before a content block.
 
         Args:

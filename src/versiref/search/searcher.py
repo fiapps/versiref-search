@@ -35,7 +35,9 @@ def search_database(
             or if reference_query is invalid
     """
     if reference_query is None and string_query is None:
-        raise ValueError("At least one of reference_query or string_query must be provided")
+        raise ValueError(
+            "At least one of reference_query or string_query must be provided"
+        )
 
     db_path = Path(db_path)
     if not db_path.exists():
@@ -59,7 +61,11 @@ def search_database(
             if ref_style is None:
                 if name_sets is None:
                     # Use same defaults as indexer
-                    name_sets = ["en-sbl_abbreviations", "en-cmos_short", "en-sbl_names"]
+                    name_sets = [
+                        "en-sbl_abbreviations",
+                        "en-cmos_short",
+                        "en-sbl_names",
+                    ]
                 ref_style = RefStyle(names=standard_names(name_sets[0]))
                 for name_set in name_sets[1:]:
                     ref_style.also_recognize(name_set)
@@ -120,20 +126,20 @@ def search_database(
                 headings = db.get_all_preceding_headings(content_id)
                 for level, (heading_id, heading_text) in headings.items():
                     heading_context[level] = BlockInfo(
-                        id=heading_id,
-                        text=heading_text,
-                        heading_level=level
+                        id=heading_id, text=heading_text, heading_level=level
                     )
 
             # Sort hits by position
             hits = sorted(hits_by_block[content_id], key=lambda h: h.start_pos)
 
-            results.append(SearchResult(
-                block_id=content_id,
-                block_text=block_text,
-                hits=hits,
-                heading_context=heading_context
-            ))
+            results.append(
+                SearchResult(
+                    block_id=content_id,
+                    block_text=block_text,
+                    hits=hits,
+                    heading_context=heading_context,
+                )
+            )
 
         return results
 
@@ -170,19 +176,15 @@ def get_context(
             headings = db.get_all_preceding_headings(start_id)
             for level in sorted(headings.keys()):
                 heading_id, heading_text = headings[level]
-                blocks.append(BlockInfo(
-                    id=heading_id,
-                    text=heading_text,
-                    heading_level=level
-                ))
+                blocks.append(
+                    BlockInfo(id=heading_id, text=heading_text, heading_level=level)
+                )
 
         # Get content range
         content_blocks = db.get_content_range(start_id, end_id)
         for block_id, block_text, heading_level in content_blocks:
-            blocks.append(BlockInfo(
-                id=block_id,
-                text=block_text,
-                heading_level=heading_level
-            ))
+            blocks.append(
+                BlockInfo(id=block_id, text=block_text, heading_level=heading_level)
+            )
 
         return blocks

@@ -44,7 +44,7 @@ def index_document(
         raise FileNotFoundError(f"Input file not found: {input_path}")
 
     # Read Markdown content
-    markdown_text = input_path.read_text(encoding='utf-8')
+    markdown_text = input_path.read_text(encoding="utf-8")
 
     # Setup versiref parser
     try:
@@ -102,7 +102,7 @@ def index_document(
                         verse_start=verse_start,
                         verse_end=verse_end,
                         char_start=start_pos,
-                        char_end=end_pos
+                        char_end=end_pos,
                     )
 
 
@@ -126,5 +126,5 @@ def get_index_stats(db_path: str | Path) -> dict:
         return {
             "block_count": db.count_content_blocks(),
             "reference_count": db.count_references(),
-            "metadata": db.get_all_metadata()
+            "metadata": db.get_all_metadata(),
         }

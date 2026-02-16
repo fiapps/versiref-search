@@ -12,6 +12,7 @@ class Hit:
         start_pos: Character position where the hit starts
         end_pos: Character position where the hit ends
     """
+
     start_pos: int
     end_pos: int
 
@@ -25,6 +26,7 @@ class BlockInfo:
         text: Markdown text of the block
         heading_level: Heading level (1-6) or None for non-headings
     """
+
     id: int
     text: str
     heading_level: Optional[int] = None
@@ -40,6 +42,7 @@ class SearchResult:
         hits: List of hit positions within the block
         heading_context: Dictionary mapping heading levels to BlockInfo for context
     """
+
     block_id: int
     block_text: str
     hits: list[Hit]

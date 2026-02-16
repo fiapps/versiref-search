@@ -16,22 +16,31 @@ def main():
 
 
 @main.command()
-@click.argument('input_file', type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option('-o', '--output', 'output_file', required=True,
-              type=click.Path(dir_okay=False, path_type=Path),
-              help='Output SQLite database file')
-@click.option('--versification', default='eng',
-              help='Versification scheme (default: eng)')
-@click.option('--title', required=True,
-              help='Document title')
-@click.option('--lang', default='en',
-              help='Language code (default: en)')
-@click.option('--author',
-              help='Document author')
-@click.option('--name-set', 'name_sets', multiple=True,
-              help='Book name set to recognize (can be specified multiple times). '
-                   'If not specified, defaults to en-sbl_abbreviations, en-cmos_short, '
-                   'and en-sbl_names.')
+@click.argument(
+    "input_file", type=click.Path(exists=True, dir_okay=False, path_type=Path)
+)
+@click.option(
+    "-o",
+    "--output",
+    "output_file",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Output SQLite database file",
+)
+@click.option(
+    "--versification", default="eng", help="Versification scheme (default: eng)"
+)
+@click.option("--title", required=True, help="Document title")
+@click.option("--lang", default="en", help="Language code (default: en)")
+@click.option("--author", help="Document author")
+@click.option(
+    "--name-set",
+    "name_sets",
+    multiple=True,
+    help="Book name set to recognize (can be specified multiple times). "
+    "If not specified, defaults to en-sbl_abbreviations, en-cmos_short, "
+    "and en-sbl_names.",
+)
 def index(input_file, output_file, versification, title, lang, author, name_sets):
     """Index a Markdown document into a searchable database.
 
@@ -50,7 +59,7 @@ def index(input_file, output_file, versification, title, lang, author, name_sets
             title=title,
             lang=lang,
             author=author,
-            name_sets=name_sets_list
+            name_sets=name_sets_list,
         )
 
         # Get and display stats
@@ -72,15 +81,24 @@ def index(input_file, output_file, versification, title, lang, author, name_sets
 
 
 @main.command()
-@click.argument('database', type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option('-r', '--reference',
-              help='Bible reference to search for (e.g., "Lk 1:28", "Ps 45:10")')
-@click.option('-s', '--string',
-              help='Text string to search for (case-insensitive)')
-@click.option('--no-headings', is_flag=True,
-              help='Do not include heading context in results')
-@click.option('--name-set', 'name_sets', multiple=True,
-              help='Book name set to recognize (can be specified multiple times)')
+@click.argument(
+    "database", type=click.Path(exists=True, dir_okay=False, path_type=Path)
+)
+@click.option(
+    "-r",
+    "--reference",
+    help='Bible reference to search for (e.g., "Lk 1:28", "Ps 45:10")',
+)
+@click.option("-s", "--string", help="Text string to search for (case-insensitive)")
+@click.option(
+    "--no-headings", is_flag=True, help="Do not include heading context in results"
+)
+@click.option(
+    "--name-set",
+    "name_sets",
+    multiple=True,
+    help="Book name set to recognize (can be specified multiple times)",
+)
 def search(database, reference, string, no_headings, name_sets):
     """Search a database for Bible references and/or text strings.
 
@@ -88,7 +106,9 @@ def search(database, reference, string, no_headings, name_sets):
     Results are returned in document order with heading context.
     """
     if not reference and not string:
-        click.echo("Error: At least one of --reference or --string must be provided", err=True)
+        click.echo(
+            "Error: At least one of --reference or --string must be provided", err=True
+        )
         sys.exit(1)
 
     try:
@@ -100,7 +120,7 @@ def search(database, reference, string, no_headings, name_sets):
             reference_query=reference,
             string_query=string,
             include_headings=not no_headings,
-            name_sets=name_sets_list
+            name_sets=name_sets_list,
         )
 
         if not results:
@@ -126,13 +146,16 @@ def search(database, reference, string, no_headings, name_sets):
 
 
 @main.command()
-@click.argument('database', type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option('--start', required=True, type=int,
-              help='Starting block ID (inclusive)')
-@click.option('--end', required=True, type=int,
-              help='Ending block ID (inclusive)')
-@click.option('--include-headings', is_flag=True,
-              help='Include preceding headings before the range')
+@click.argument(
+    "database", type=click.Path(exists=True, dir_okay=False, path_type=Path)
+)
+@click.option("--start", required=True, type=int, help="Starting block ID (inclusive)")
+@click.option("--end", required=True, type=int, help="Ending block ID (inclusive)")
+@click.option(
+    "--include-headings",
+    is_flag=True,
+    help="Include preceding headings before the range",
+)
 def context(database, start, end, include_headings):
     """Retrieve a range of content blocks with optional heading context.
 
@@ -143,7 +166,7 @@ def context(database, start, end, include_headings):
             db_path=database,
             start_id=start,
             end_id=end,
-            include_headings=include_headings
+            include_headings=include_headings,
         )
 
         if not blocks:
@@ -172,5 +195,5 @@ def context(database, start, end, include_headings):
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
