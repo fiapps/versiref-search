@@ -30,6 +30,10 @@ mypy_path = "src"
 namespace_packages = true
 explicit_package_bases = true
 
+[tool.ruff.lint]
+select = ["D"]
+ignore = ["D203", "D213"]
+
 [dependency-groups]
 dev = [
     "mypy>=1.19.1",

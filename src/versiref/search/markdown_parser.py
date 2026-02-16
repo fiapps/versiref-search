@@ -13,6 +13,7 @@ def parse_markdown(markdown_text: str) -> list[BlockInfo]:
 
     Returns:
         List of BlockInfo objects representing block-level elements in document order
+
     """
     # Create mistune markdown parser that returns AST
     markdown = mistune.create_markdown(renderer="ast")
@@ -44,6 +45,7 @@ def _extract_block(
 
     Returns:
         Tuple of (block_text, heading_level) or (None, None) if not a block element
+
     """
     token_type = token.get("type")
 
@@ -107,6 +109,7 @@ def _extract_inline_text(children: list[dict[str, Any]]) -> str:
 
     Returns:
         Concatenated text from all inline elements
+
     """
     parts = []
     for child in children:
@@ -168,6 +171,7 @@ def _extract_list_text(token: dict[str, Any]) -> str:
 
     Returns:
         Formatted list text
+
     """
     token_type = token.get("type")
 

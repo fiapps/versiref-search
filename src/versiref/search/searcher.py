@@ -33,6 +33,7 @@ def search_database(
         FileNotFoundError: If database doesn't exist
         ValueError: If neither reference_query nor string_query is provided,
             or if reference_query is invalid
+
     """
     if reference_query is None and string_query is None:
         raise ValueError(
@@ -163,6 +164,7 @@ def get_context(
 
     Raises:
         FileNotFoundError: If database doesn't exist
+
     """
     db_path = Path(db_path)
     if not db_path.exists():

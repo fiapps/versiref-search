@@ -35,6 +35,7 @@ def index_document(
     Raises:
         FileNotFoundError: If input file doesn't exist
         ValueError: If versification is invalid
+
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -117,6 +118,7 @@ def get_index_stats(db_path: str | Path) -> dict:
 
     Raises:
         FileNotFoundError: If database doesn't exist
+
     """
     db_path = Path(db_path)
     if not db_path.exists():

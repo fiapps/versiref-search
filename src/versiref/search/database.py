@@ -44,6 +44,7 @@ class Database:
 
         Args:
             db_path: Path to SQLite database file
+
         """
         self.db_path = Path(db_path)
         self.conn: Optional[sqlite3.Connection] = None
@@ -84,6 +85,7 @@ class Database:
         Args:
             key: Metadata key
             value: Metadata value
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -101,6 +103,7 @@ class Database:
 
         Returns:
             Metadata value or None if not found
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -114,6 +117,7 @@ class Database:
 
         Returns:
             Dictionary of metadata key-value pairs
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -132,6 +136,7 @@ class Database:
 
         Returns:
             ID of inserted content block
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -163,6 +168,7 @@ class Database:
 
         Returns:
             ID of inserted reference index entry
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -188,6 +194,7 @@ class Database:
 
         Returns:
             List of tuples: (content_id, block_text, char_start, char_end)
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -217,6 +224,7 @@ class Database:
 
         Returns:
             List of tuples: (content_id, block_text)
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -240,6 +248,7 @@ class Database:
 
         Returns:
             Tuple of (id, block_text, heading_level) or None if not found
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -262,6 +271,7 @@ class Database:
 
         Returns:
             List of tuples: (id, block_text, heading_level)
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -289,6 +299,7 @@ class Database:
 
         Returns:
             Tuple of (id, block_text) or None if not found
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -312,6 +323,7 @@ class Database:
 
         Returns:
             Dictionary mapping heading_level to (id, block_text)
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -328,6 +340,7 @@ class Database:
 
         Returns:
             Number of content blocks
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -341,6 +354,7 @@ class Database:
 
         Returns:
             Number of reference index entries
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")

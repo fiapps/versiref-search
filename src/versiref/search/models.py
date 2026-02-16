@@ -11,6 +11,7 @@ class Hit:
     Attributes:
         start_pos: Character position where the hit starts
         end_pos: Character position where the hit ends
+
     """
 
     start_pos: int
@@ -25,6 +26,7 @@ class BlockInfo:
         id: Content block ID
         text: Markdown text of the block
         heading_level: Heading level (1-6) or None for non-headings
+
     """
 
     id: int
@@ -41,6 +43,7 @@ class SearchResult:
         block_text: Markdown text of the content block
         hits: List of hit positions within the block
         heading_context: Dictionary mapping heading levels to BlockInfo for context
+
     """
 
     block_id: int
@@ -56,6 +59,7 @@ class SearchResult:
 
         Returns:
             Formatted string for display
+
         """
         lines = []
 
