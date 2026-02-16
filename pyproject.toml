@@ -24,3 +24,8 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "versiref.search"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.1",
+]
