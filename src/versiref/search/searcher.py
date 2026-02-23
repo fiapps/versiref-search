@@ -1,7 +1,7 @@
 """Search module for versiref-search."""
 
 from pathlib import Path
-from versiref import Versification, RefParser, RefStyle, standard_names
+from versiref import Versification, RefParser, RefStyle
 
 from .database import Database
 from .models import SearchResult, Hit, BlockInfo
@@ -9,21 +9,19 @@ from .models import SearchResult, Hit, BlockInfo
 
 def search_database(
     db_path: str | Path,
+    ref_style: RefStyle,
     reference_query: str | None = None,
     string_query: str | None = None,
     include_headings: bool = True,
-    ref_style: RefStyle | None = None,
-    name_sets: list[str] | None = None,
 ) -> list[SearchResult]:
     """Search a database for Bible references and/or text strings.
 
     Args:
         db_path: Path to SQLite database file
+        ref_style: RefStyle for parsing reference queries
         reference_query: Bible reference to search for (e.g., "Romans 3", "Isaiah 7:14")
         string_query: Text string to search for (case-insensitive)
         include_headings: Whether to include heading context in results
-        ref_style: Optional RefStyle for parsing reference queries
-        name_sets: List of book name set identifiers (ignored if ref_style provided)
 
     Returns:
         List of SearchResult objects in document order
@@ -56,20 +54,6 @@ def search_database(
         if reference_query:
             # Setup versiref parser
             versification = Versification.named(versification_name)
-
-            # Build reference style
-            if ref_style is None:
-                if name_sets is None:
-                    # Use same defaults as indexer
-                    name_sets = [
-                        "en-sbl_abbreviations",
-                        "en-cmos_short",
-                        "en-sbl_names",
-                    ]
-                ref_style = RefStyle(names=standard_names(name_sets[0]))
-                for name_set in name_sets[1:]:
-                    ref_style.also_recognize(name_set)
-
             parser = RefParser(ref_style, versification)
 
             # Parse reference query

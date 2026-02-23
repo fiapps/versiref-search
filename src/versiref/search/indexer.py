@@ -1,7 +1,7 @@
 """Indexing module for versiref-search."""
 
 from pathlib import Path
-from versiref import Versification, RefParser, RefStyle, standard_names
+from versiref import Versification, RefParser, RefStyle
 
 from .database import Database, SCHEMA_VERSION
 from .markdown_parser import parse_markdown
@@ -12,10 +12,9 @@ def index_document(
     output_path: str | Path,
     versification: str,
     title: str,
+    ref_style: RefStyle,
     lang: str = "en",
     author: str | None = None,
-    name_sets: list[str] | None = None,
-    ref_style: RefStyle | None = None,
 ) -> None:
     """Index a Markdown document into a SQLite database.
 
@@ -24,12 +23,9 @@ def index_document(
         output_path: Path to output SQLite database file
         versification: Versification identifier (e.g., "eng", "org")
         title: Document title
+        ref_style: RefStyle to use for parsing Bible references
         lang: Language code (default: "en")
         author: Optional author name
-        name_sets: List of book name set identifiers to recognize (e.g.,
-            ["en-sbl_abbreviations", "en-cmos_short"]). If None, uses a
-            broad default set. Ignored if ref_style is provided.
-        ref_style: Optional RefStyle to use. If provided, name_sets is ignored.
 
     Raises:
         FileNotFoundError: If input file doesn't exist
@@ -51,23 +47,6 @@ def index_document(
         vers = Versification.named(versification)
     except (FileNotFoundError, ValueError) as e:
         raise ValueError(f"Invalid versification '{versification}': {e}")
-
-    # Build reference style
-    if ref_style is None:
-        # Use provided name sets or sensible defaults
-        if name_sets is None:
-            # Default: recognize broad range of English abbreviations
-            if lang.startswith("en"):
-                name_sets = ["en-sbl_abbreviations", "en-cmos_short", "en-sbl_names"]
-            else:
-                # Default to English for now
-                name_sets = ["en-sbl_abbreviations", "en-cmos_short", "en-sbl_names"]
-
-        # Build RefStyle with primary name set
-        ref_style = RefStyle(names=standard_names(name_sets[0]))
-        # Add additional name sets
-        for name_set in name_sets[1:]:
-            ref_style.also_recognize(name_set)
 
     parser = RefParser(ref_style, vers)
 

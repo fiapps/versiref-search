@@ -3,6 +3,7 @@
 import sys
 from pathlib import Path
 import click
+from versiref import RefStyle
 
 from .indexer import index_document, get_index_stats
 from .searcher import search_database, get_context
@@ -34,22 +35,19 @@ def main():
 @click.option("--lang", default="en", help="Language code (default: en)")
 @click.option("--author", help="Document author")
 @click.option(
-    "--name-set",
-    "name_sets",
-    multiple=True,
-    help="Book name set to recognize (can be specified multiple times). "
-    "If not specified, defaults to en-sbl_abbreviations, en-cmos_short, "
-    "and en-sbl_names.",
+    "--style",
+    default="en-cmos_short",
+    show_default=True,
+    help="Named reference style (e.g., en-sbl, en-cmos_short)",
 )
-def index(input_file, output_file, versification, title, lang, author, name_sets):
+def index(input_file, output_file, versification, title, lang, author, style):
     """Index a Markdown document into a searchable database.
 
     Creates a SQLite database with indexed Bible references and content blocks
     from INPUT_FILE.
     """
     try:
-        # Convert name_sets tuple to list or None
-        name_sets_list = list(name_sets) if name_sets else None
+        ref_style = RefStyle.named(style)
 
         click.echo(f"Indexing {input_file}...")
         index_document(
@@ -57,9 +55,9 @@ def index(input_file, output_file, versification, title, lang, author, name_sets
             output_path=output_file,
             versification=versification,
             title=title,
+            ref_style=ref_style,
             lang=lang,
             author=author,
-            name_sets=name_sets_list,
         )
 
         # Get and display stats
@@ -94,12 +92,12 @@ def index(input_file, output_file, versification, title, lang, author, name_sets
     "--no-headings", is_flag=True, help="Do not include heading context in results"
 )
 @click.option(
-    "--name-set",
-    "name_sets",
-    multiple=True,
-    help="Book name set to recognize (can be specified multiple times)",
+    "--style",
+    default="en-cmos_short",
+    show_default=True,
+    help="Named reference style (e.g., en-sbl, en-cmos_short)",
 )
-def search(database, reference, string, no_headings, name_sets):
+def search(database, reference, string, no_headings, style):
     """Search a database for Bible references and/or text strings.
 
     At least one of --reference or --string must be provided.
@@ -112,15 +110,14 @@ def search(database, reference, string, no_headings, name_sets):
         sys.exit(1)
 
     try:
-        # Convert name_sets tuple to list or None
-        name_sets_list = list(name_sets) if name_sets else None
+        ref_style = RefStyle.named(style)
 
         results = search_database(
             db_path=database,
+            ref_style=ref_style,
             reference_query=reference,
             string_query=string,
             include_headings=not no_headings,
-            name_sets=name_sets_list,
         )
 
         if not results:
