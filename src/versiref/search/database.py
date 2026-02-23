@@ -2,7 +2,7 @@
 
 import sqlite3
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 SCHEMA_VERSION = "1.0"
 
@@ -47,7 +47,7 @@ class Database:
 
         """
         self.db_path = Path(db_path)
-        self.conn: Optional[sqlite3.Connection] = None
+        self.conn: sqlite3.Connection | None = None
 
     def __enter__(self) -> "Database":
         """Context manager entry."""
@@ -95,7 +95,7 @@ class Database:
         )
         self.conn.commit()
 
-    def get_metadata(self, key: str) -> Optional[str]:
+    def get_metadata(self, key: str) -> str | None:
         """Get a metadata value by key.
 
         Args:
@@ -126,7 +126,7 @@ class Database:
         return {row["key"]: row["value"] for row in cursor.fetchall()}
 
     def insert_content(
-        self, block_text: str, heading_level: Optional[int] = None
+        self, block_text: str, heading_level: int | None = None
     ) -> int:
         """Insert a content block.
 
@@ -240,7 +240,7 @@ class Database:
 
     def get_content_by_id(
         self, content_id: int
-    ) -> Optional[tuple[int, str, Optional[int]]]:
+    ) -> tuple[int, str, int | None] | None:
         """Get a content block by ID.
 
         Args:
@@ -262,7 +262,7 @@ class Database:
 
     def get_content_range(
         self, start_id: int, end_id: int
-    ) -> list[tuple[int, str, Optional[int]]]:
+    ) -> list[tuple[int, str, int | None]]:
         """Get a range of content blocks.
 
         Args:
@@ -290,7 +290,7 @@ class Database:
 
     def get_preceding_heading(
         self, content_id: int, heading_level: int
-    ) -> Optional[tuple[int, str]]:
+    ) -> tuple[int, str] | None:
         """Get the most recent heading at a specific level before a content block.
 
         Args:

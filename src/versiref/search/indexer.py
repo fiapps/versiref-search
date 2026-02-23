@@ -1,7 +1,6 @@
 """Indexing module for versiref-search."""
 
 from pathlib import Path
-from typing import Optional
 from versiref import Versification, RefParser, RefStyle, standard_names
 
 from .database import Database, SCHEMA_VERSION
@@ -14,9 +13,9 @@ def index_document(
     versification: str,
     title: str,
     lang: str = "en",
-    author: Optional[str] = None,
-    name_sets: Optional[list[str]] = None,
-    ref_style: Optional[RefStyle] = None,
+    author: str | None = None,
+    name_sets: list[str] | None = None,
+    ref_style: RefStyle | None = None,
 ) -> None:
     """Index a Markdown document into a SQLite database.
 

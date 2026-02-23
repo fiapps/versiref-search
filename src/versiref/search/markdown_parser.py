@@ -1,6 +1,6 @@
 """Markdown parsing for versiref-search."""
 
-from typing import Any, Optional
+from typing import Any
 import mistune
 from .models import BlockInfo
 
@@ -36,7 +36,7 @@ def parse_markdown(markdown_text: str) -> list[BlockInfo]:
 
 def _extract_block(
     token: dict[str, Any], source_text: str
-) -> tuple[Optional[str], Optional[int]]:
+) -> tuple[str | None, int | None]:
     """Extract text and heading level from a token.
 
     Args:

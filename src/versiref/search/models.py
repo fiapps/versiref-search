@@ -1,7 +1,6 @@
 """Data models for versiref-search."""
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -31,7 +30,7 @@ class BlockInfo:
 
     id: int
     text: str
-    heading_level: Optional[int] = None
+    heading_level: int | None = None
 
 
 @dataclass

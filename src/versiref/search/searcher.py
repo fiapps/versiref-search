@@ -1,7 +1,6 @@
 """Search module for versiref-search."""
 
 from pathlib import Path
-from typing import Optional
 from versiref import Versification, RefParser, RefStyle, standard_names
 
 from .database import Database
@@ -10,11 +9,11 @@ from .models import SearchResult, Hit, BlockInfo
 
 def search_database(
     db_path: str | Path,
-    reference_query: Optional[str] = None,
-    string_query: Optional[str] = None,
+    reference_query: str | None = None,
+    string_query: str | None = None,
     include_headings: bool = True,
-    ref_style: Optional[RefStyle] = None,
-    name_sets: Optional[list[str]] = None,
+    ref_style: RefStyle | None = None,
+    name_sets: list[str] | None = None,
 ) -> list[SearchResult]:
     """Search a database for Bible references and/or text strings.
 
