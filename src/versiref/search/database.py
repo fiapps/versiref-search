@@ -125,9 +125,7 @@ class Database:
         cursor = self.conn.execute("SELECT key, value FROM metadata")
         return {row["key"]: row["value"] for row in cursor.fetchall()}
 
-    def insert_content(
-        self, block_text: str, heading_level: int | None = None
-    ) -> int:
+    def insert_content(self, block_text: str, heading_level: int | None = None) -> int:
         """Insert a content block.
 
         Args:
@@ -238,9 +236,7 @@ class Database:
         )
         return [(row["id"], row["block_text"]) for row in cursor.fetchall()]
 
-    def get_content_by_id(
-        self, content_id: int
-    ) -> tuple[int, str, int | None] | None:
+    def get_content_by_id(self, content_id: int) -> tuple[int, str, int | None] | None:
         """Get a content block by ID.
 
         Args:

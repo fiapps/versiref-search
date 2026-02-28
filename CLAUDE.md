@@ -34,9 +34,8 @@ uv run mypy src/
 ```
 
 ### Testing
-No test framework is currently configured. When adding tests, use pytest:
+Tests live in `tests/`. Run with:
 ```bash
-uv add --dev pytest
 uv run pytest
 ```
 
@@ -79,19 +78,31 @@ This allows searching for "Isaiah 7:14" to match documents citing "Isaiah 7:7-16
 
 ## Implementation Status
 
-**Current Phase**: Early development (Phase 1)
-- The main source file (`src/versiref/search/__init__.py`) is currently empty
-- No tests exist yet
-- Design document (`docs/design.md`) contains full architectural specification
+**Current Phase**: Phase 1 complete
 
-**Planned Components**:
-1. **Indexing module**: CLI tool to parse Markdown and build SQLite databases
-2. **Search module**: CLI tool for querying databases with `-r` (reference) and `-s` (string) flags
-3. **Python API**: Programmatic search interface
+**Source modules** (under `src/versiref/search/`):
+- `models.py`: Core data types
+- `database.py`: SQLite schema creation and access
+- `markdown_parser.py`: Markdown block parsing
+- `indexer.py`: Builds SQLite index from a Markdown file
+- `searcher.py`: Queries the index by reference or string
+- `cli.py`: Click-based CLI entry point
+- `__init__.py`: Public API exports
+
+**CLI entry point**: `versiref-search` with subcommands `index`, `search`, `context`
+
+**Test modules** (under `tests/`): covers all non-CLI modules
+
+**Implemented Components**:
+1. **Indexing module**: `indexer.py` + CLI `index` command — parses Markdown and builds SQLite databases
+2. **Search module**: `searcher.py` + CLI `search` and `context` commands — queries databases by reference or string
+3. **Python API**: Public interface exported from `__init__.py`
 
 ## Key Dependencies
 
-- **versiref** (>=0.2.0): For parsing and manipulating Bible references
+- **versiref** (>=0.3.0): For parsing and manipulating Bible references
+- **click** (>=8.1.0): CLI framework
+- **mistune** (>=3.0.0): Markdown parsing
 - **Python** (>=3.10): Minimum version required
 - **SQLite**: Built into Python, used for all indexing
 
@@ -117,5 +128,5 @@ Key configuration:
 - `docs/design.md`: Comprehensive design document with full schema, workflows, and implementation phases
 - `docs/versiref/`: Documentation for the `versiref` dependency
 - `pyproject.toml`: Package configuration and dependencies
-- `src/versiref/search/__init__.py`: Main package entry point (to be implemented)
+- `src/versiref/search/__init__.py`: Main package entry point and public API exports
 - `uv.lock`: Lock file for reproducible dependency resolution
