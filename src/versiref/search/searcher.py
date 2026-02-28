@@ -4,7 +4,7 @@ from pathlib import Path
 from versiref import Versification, RefParser, RefStyle
 
 from .database import Database
-from .models import SearchResult, Hit, BlockInfo
+from .models import SearchResult, BlockInfo
 
 
 def search_database(
@@ -20,7 +20,7 @@ def search_database(
         db_path: Path to SQLite database file
         ref_style: RefStyle for parsing reference queries
         reference_query: Bible reference to search for (e.g., "Romans 3", "Isaiah 7:14")
-        string_query: Text string to search for (case-insensitive)
+        string_query: Text string to search for (FTS5 word-boundary matching)
         include_headings: Whether to include heading context in results
 
     Returns:
@@ -47,16 +47,16 @@ def search_database(
         if not versification_name:
             raise ValueError("Database missing versification_scheme metadata")
 
-        # Collect all hits by content_id
-        hits_by_block: dict[int, list[Hit]] = {}
+        # Collect matched blocks: content_id -> block_text
+        # For string matches, block_text contains <mark> tags from FTS5 highlight()
+        ref_blocks: dict[int, str] = {}
+        string_blocks: dict[int, str] = {}
 
         # Search by reference if provided
         if reference_query:
-            # Setup versiref parser
             versification = Versification.named(versification_name)
             parser = RefParser(ref_style, versification)
 
-            # Parse reference query
             try:
                 ref = parser.parse(reference_query, silent=False)
             except Exception as e:
@@ -65,47 +65,32 @@ def search_database(
             if ref is None:
                 raise ValueError(f"Could not parse reference query '{reference_query}'")
 
-            # Search for each verse range in the reference
             for verse_start, verse_end in ref.range_keys():
                 ref_results = db.search_by_reference_range(verse_start, verse_end)
-                for content_id, block_text, char_start, char_end in ref_results:
-                    if content_id not in hits_by_block:
-                        hits_by_block[content_id] = []
-                    # Add hit if not already present
-                    hit = Hit(char_start, char_end)
-                    if hit not in hits_by_block[content_id]:
-                        hits_by_block[content_id].append(hit)
+                for content_id, block_text in ref_results:
+                    if content_id not in ref_blocks:
+                        ref_blocks[content_id] = block_text
 
         # Search by string if provided
         if string_query:
             string_results = db.search_by_string(string_query)
-            for content_id, block_text in string_results:
-                if content_id not in hits_by_block:
-                    hits_by_block[content_id] = []
-                # Find all occurrences of the string in the block
-                search_lower = string_query.lower()
-                block_lower = block_text.lower()
-                start = 0
-                while True:
-                    pos = block_lower.find(search_lower, start)
-                    if pos == -1:
-                        break
-                    hit = Hit(pos, pos + len(string_query))
-                    if hit not in hits_by_block[content_id]:
-                        hits_by_block[content_id].append(hit)
-                    start = pos + 1
+            for content_id, highlighted_text in string_results:
+                if content_id not in string_blocks:
+                    string_blocks[content_id] = highlighted_text
 
-        # Build SearchResult objects
+        # Merge: for blocks found by both queries, prefer the highlighted version
+        all_block_ids = sorted(set(ref_blocks) | set(string_blocks))
+
         search_results: list[SearchResult] = []
-        for content_id in sorted(hits_by_block.keys()):
-            # Get content block
-            block_info = db.get_content_by_id(content_id)
-            if not block_info:
-                continue
-            _, block_text, _ = block_info
+        for content_id in all_block_ids:
+            # Use highlighted text if available, otherwise plain text
+            if content_id in string_blocks:
+                block_text = string_blocks[content_id]
+            else:
+                block_text = ref_blocks[content_id]
 
             # Get heading context if requested
-            heading_context = {}
+            heading_context: dict[int, BlockInfo] = {}
             if include_headings:
                 headings = db.get_all_preceding_headings(content_id)
                 for level, (heading_id, heading_text) in headings.items():
@@ -113,14 +98,10 @@ def search_database(
                         id=heading_id, text=heading_text, heading_level=level
                     )
 
-            # Sort hits by position
-            hits = sorted(hits_by_block[content_id], key=lambda h: h.start_pos)
-
             search_results.append(
                 SearchResult(
                     block_id=content_id,
                     block_text=block_text,
-                    hits=hits,
                     heading_context=heading_context,
                 )
             )

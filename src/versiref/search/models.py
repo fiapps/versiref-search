@@ -4,20 +4,6 @@ from dataclasses import dataclass
 
 
 @dataclass
-class Hit:
-    """Represents a single hit within a content block.
-
-    Attributes:
-        start_pos: Character position where the hit starts
-        end_pos: Character position where the hit ends
-
-    """
-
-    start_pos: int
-    end_pos: int
-
-
-@dataclass
 class BlockInfo:
     """Information about a content block.
 
@@ -39,15 +25,14 @@ class SearchResult:
 
     Attributes:
         block_id: ID of the content block containing hits
-        block_text: Markdown text of the content block
-        hits: List of hit positions within the block
+        block_text: Markdown text of the content block (may contain <mark> tags
+            for string search highlights)
         heading_context: Dictionary mapping heading levels to BlockInfo for context
 
     """
 
     block_id: int
     block_text: str
-    hits: list[Hit]
     heading_context: dict[int, BlockInfo]
 
     def format_for_display(self, show_headings: bool = True) -> str:
@@ -76,12 +61,5 @@ class SearchResult:
         # Add the content block with ID
         lines.append(f"[Block {self.block_id}]")
         lines.append(self.block_text)
-
-        # Add hit positions info
-        if self.hits:
-            hit_positions = ", ".join(
-                f"{hit.start_pos}-{hit.end_pos}" for hit in self.hits
-            )
-            lines.append(f"  (Hits at: {hit_positions})")
 
         return "\n".join(lines)

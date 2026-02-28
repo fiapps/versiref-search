@@ -186,10 +186,19 @@ def test_search_by_string_not_found(db):
     assert db.search_by_string("nonexistent") == []
 
 
-def test_search_by_string_returns_text(db):
-    block_id = db.insert_content("Specific content.")
+def test_search_by_string_returns_highlighted_text(db):
+    db.insert_content("Specific content.")
     results = db.search_by_string("Specific")
-    assert results[0][1] == "Specific content."
+    assert "<mark>Specific</mark> content." == results[0][1]
+
+
+def test_search_by_string_word_boundary(db):
+    """FTS5 matches whole words, not substrings."""
+    db.insert_content("Anna went to the market.")
+    db.insert_content("Something soprannaturale happened.")
+    results = db.search_by_string("Anna")
+    assert len(results) == 1
+    assert "<mark>Anna</mark>" in results[0][1]
 
 
 # --- Heading context ---

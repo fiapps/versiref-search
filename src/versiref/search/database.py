@@ -14,6 +14,25 @@ CREATE TABLE IF NOT EXISTS content (
     heading_level INTEGER NULL  -- 1-6 for headings, NULL otherwise
 );
 
+-- FTS5 full-text index on content blocks
+CREATE VIRTUAL TABLE IF NOT EXISTS content_fts USING fts5(
+    block_text,
+    content='content',
+    content_rowid='id'
+);
+
+-- Keep FTS5 in sync with the content table
+CREATE TRIGGER IF NOT EXISTS content_ai AFTER INSERT ON content BEGIN
+    INSERT INTO content_fts(rowid, block_text) VALUES (new.id, new.block_text);
+END;
+CREATE TRIGGER IF NOT EXISTS content_ad AFTER DELETE ON content BEGIN
+    INSERT INTO content_fts(content_fts, rowid, block_text) VALUES('delete', old.id, old.block_text);
+END;
+CREATE TRIGGER IF NOT EXISTS content_au AFTER UPDATE ON content BEGIN
+    INSERT INTO content_fts(content_fts, rowid, block_text) VALUES('delete', old.id, old.block_text);
+    INSERT INTO content_fts(rowid, block_text) VALUES (new.id, new.block_text);
+END;
+
 -- Indexes Bible reference positions and verse ranges
 CREATE TABLE IF NOT EXISTS reference_index (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,42 +202,12 @@ class Database:
 
     def search_by_reference_range(
         self, query_start: int, query_end: int
-    ) -> list[tuple[int, str, int, int]]:
+    ) -> list[tuple[int, str]]:
         """Search for content blocks containing references that overlap with query range.
 
         Args:
             query_start: Start of query range (8-digit integer)
             query_end: End of query range (8-digit integer)
-
-        Returns:
-            List of tuples: (content_id, block_text, char_start, char_end)
-
-        """
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-
-        cursor = self.conn.execute(
-            """SELECT DISTINCT
-                   r.content_id,
-                   c.block_text,
-                   r.char_start,
-                   r.char_end
-               FROM reference_index r
-               JOIN content c ON r.content_id = c.id
-               WHERE r.verse_start <= ? AND r.verse_end >= ?
-               ORDER BY r.content_id, r.char_start""",
-            (query_end, query_start),
-        )
-        return [
-            (row["content_id"], row["block_text"], row["char_start"], row["char_end"])
-            for row in cursor.fetchall()
-        ]
-
-    def search_by_string(self, search_term: str) -> list[tuple[int, str]]:
-        """Search for content blocks containing a string (case-insensitive).
-
-        Args:
-            search_term: Text to search for
 
         Returns:
             List of tuples: (content_id, block_text)
@@ -228,13 +217,37 @@ class Database:
             raise RuntimeError("Database not connected")
 
         cursor = self.conn.execute(
-            """SELECT id, block_text
-               FROM content
-               WHERE block_text LIKE ? COLLATE NOCASE
-               ORDER BY id""",
-            (f"%{search_term}%",),
+            """SELECT DISTINCT c.id, c.block_text
+               FROM content c
+               JOIN reference_index r ON r.content_id = c.id
+               WHERE r.verse_start <= ? AND r.verse_end >= ?
+               ORDER BY c.id""",
+            (query_end, query_start),
         )
         return [(row["id"], row["block_text"]) for row in cursor.fetchall()]
+
+    def search_by_string(self, search_term: str) -> list[tuple[int, str]]:
+        """Search for content blocks containing a word/phrase (FTS5 word-boundary matching).
+
+        Args:
+            search_term: Text to search for
+
+        Returns:
+            List of tuples: (content_id, highlighted_block_text) where
+            highlighted_block_text contains <mark>...</mark> around matches
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+
+        cursor = self.conn.execute(
+            """SELECT rowid, highlight(content_fts, 0, '<mark>', '</mark>')
+               FROM content_fts
+               WHERE content_fts MATCH ?
+               ORDER BY rowid""",
+            (search_term,),
+        )
+        return [(row[0], row[1]) for row in cursor.fetchall()]
 
     def get_content_by_id(self, content_id: int) -> tuple[int, str, int | None] | None:
         """Get a content block by ID.

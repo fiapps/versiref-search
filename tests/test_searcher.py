@@ -69,20 +69,12 @@ def test_string_search_no_match(indexed_db, ref_style):
     assert results == []
 
 
-def test_string_search_hit_positions(indexed_db, ref_style):
-    results = search_database(indexed_db, ref_style, string_query="Lk 1:28")
-    assert len(results) == 1
-    hit = results[0].hits[0]
-    block_text = results[0].block_text
-    assert block_text[hit.start_pos : hit.end_pos].lower() == "lk 1:28"
-
-
-def test_string_search_multiple_occurrences(indexed_db, ref_style):
-    """Each occurrence of the search term in a block becomes a separate hit."""
-    # "paragraph" appears once in each paragraph block of minimal_md
+def test_string_search_highlights(indexed_db, ref_style):
+    """String search results contain <mark> tags around matches."""
     results = search_database(indexed_db, ref_style, string_query="paragraph")
+    assert len(results) > 0
     for result in results:
-        assert len(result.hits) >= 1
+        assert "<mark>paragraph</mark>" in result.block_text.lower()
 
 
 # --- Combined search ---
@@ -91,9 +83,18 @@ def test_string_search_multiple_occurrences(indexed_db, ref_style):
 def test_combined_search_union(indexed_db, ref_style):
     # reference finds Lk 1:28 block; string finds Ps 45:10 block — distinct blocks
     results = search_database(
-        indexed_db, ref_style, reference_query="Lk 1:28", string_query="Ps 45:10"
+        indexed_db, ref_style, reference_query="Lk 1:28", string_query="Ps"
     )
     assert len(results) == 2
+
+
+def test_combined_search_prefers_highlighted(indexed_db, ref_style):
+    """When both queries match the same block, the highlighted version is used."""
+    results = search_database(
+        indexed_db, ref_style, reference_query="Lk 1:28", string_query="Opening"
+    )
+    assert len(results) == 1
+    assert "<mark>" in results[0].block_text
 
 
 # --- Heading context ---
