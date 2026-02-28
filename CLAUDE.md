@@ -50,13 +50,17 @@ The system uses SQLite databases (one per source document) with three main table
    - `block_text`: Markdown text for one block-level element
    - `heading_level`: Integer 1-6 for headings, NULL otherwise
 
-2. **reference_index**: Bible reference positions and ranges
+2. **content_fts**: FTS5 virtual table for full-text search on `block_text`
+   - Synced with `content` via triggers (insert/update/delete)
+   - Provides word-boundary matching (not substring) and `highlight()` for `<mark>` tag wrapping
+
+3. **reference_index**: Bible reference positions and ranges
    - `content_id`: References the content block
    - `verse_start`/`verse_end`: 8-digit integer encodings of verse ranges
    - `char_start`/`char_end`: Character positions in block_text
    - Multiple rows per content block if multiple references exist
 
-3. **metadata**: Key-value pairs (title, versification_scheme, lang, author, etc.)
+4. **metadata**: Key-value pairs (title, versification_scheme, lang, author, etc.)
 
 ### Verse Encoding
 
@@ -81,7 +85,7 @@ This allows searching for "Isaiah 7:14" to match documents citing "Isaiah 7:7-16
 **Current Phase**: Phase 1 complete
 
 **Source modules** (under `src/versiref/search/`):
-- `models.py`: Core data types
+- `models.py`: Core data types (`BlockInfo`, `SearchResult`)
 - `database.py`: SQLite schema creation and access
 - `markdown_parser.py`: Markdown block parsing
 - `indexer.py`: Builds SQLite index from a Markdown file
@@ -109,7 +113,7 @@ This allows searching for "Isaiah 7:14" to match documents citing "Isaiah 7:7-16
 ## Design Principles
 
 1. **Per-document databases**: Each source document gets its own SQLite file for portability and easy regeneration
-2. **Markdown preservation**: Store and search Markdown as-is to preserve formatting and maintain character position accuracy
+2. **Markdown preservation**: Store and search Markdown as-is to preserve formatting; string search uses FTS5 word-boundary matching with `<mark>` highlight tags in results
 3. **Versification scheme awareness**: Each database stores its scheme; all references are scheme-specific
 4. **Document order preservation**: Results maintain original document order via sequential IDs
 5. **Simple initial implementation**: Command-line tools first, boolean query operators in future phases
