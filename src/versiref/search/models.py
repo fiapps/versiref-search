@@ -51,8 +51,7 @@ class SearchResult:
         if show_headings and self.heading_context:
             for level in sorted(self.heading_context.keys()):
                 heading = self.heading_context[level]
-                indent = "  " * (level - 1)
-                lines.append(f"{indent}{heading.text.strip()}")
+                lines.append(heading.text.strip())
 
         # Add separator before content
         if lines:
