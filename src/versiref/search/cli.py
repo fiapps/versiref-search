@@ -120,6 +120,10 @@ def index(
             )
         metadata = _load_metadata(Path(meta_path))
 
+        # Supply versification from config
+        if "versification" in config:
+            metadata["versification"] = config["versification"]
+
         # Resolve style: CLI --style overrides config
         style_value = style if style is not None else config.get("style")
         if style_value is None:
