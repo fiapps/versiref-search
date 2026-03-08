@@ -1,10 +1,59 @@
 """Indexing module for versiref-search."""
 
+import logging
+import re
 from pathlib import Path
 from versiref import Versification, RefParser, RefStyle
 
 from .database import Database, SCHEMA_VERSION
 from .markdown_parser import parse_markdown
+
+logger = logging.getLogger(__name__)
+
+
+def find_unrecognized_abbreviations(
+    text: str,
+    ref_style: RefStyle,
+    whitelist: list[str] | None = None,
+) -> dict[str, str]:
+    """Find potential Bible abbreviations not recognized by the ref_style.
+
+    Scans text with a regex for patterns that look like Bible references
+    (e.g., "Lk 1:28", "1 Sam 3:4") and reports any whose book abbreviation
+    is not in ref_style.recognized_names.
+
+    Args:
+        text: The text to scan.
+        ref_style: RefStyle whose recognized_names are checked.
+        whitelist: Optional list of abbreviations to ignore.
+
+    Returns:
+        Dict mapping each unrecognized abbreviation to an example of its usage.
+
+    """
+    sep = re.escape(ref_style.chapter_verse_separator)
+    pattern = rf"(\d\s+)?(\w[\w()]*)\s+\d+{sep}\d+"
+    whitelist_set = set(whitelist) if whitelist else set()
+    unrecognized: dict[str, str] = {}
+    for match in re.finditer(pattern, text):
+        leading = match.group(1)
+        book_name = match.group(2)
+        if leading:
+            abbrev = leading + book_name  # e.g., "1 Sam"
+        else:
+            abbrev = book_name
+        # Skip if recognized (check full abbrev, or book_name part for numbered books)
+        if abbrev in ref_style.recognized_names:
+            continue
+        if leading and book_name in ref_style.recognized_names:
+            continue
+        if abbrev in whitelist_set:
+            continue
+        if abbrev not in unrecognized:
+            unrecognized[abbrev] = match.group(0)
+    for abbrev, example in unrecognized.items():
+        logger.warning('Unrecognized abbreviation "%s" in "%s".', abbrev, example)
+    return unrecognized
 
 
 def _normalize_metadata_value(value: object) -> str:
@@ -22,6 +71,9 @@ def index_document(
     output_path: str | Path,
     metadata: dict[str, object],
     ref_style: RefStyle,
+    *,
+    check_abbreviations: bool = True,
+    abbreviation_whitelist: list[str] | None = None,
 ) -> None:
     """Index a Markdown document into a SQLite database.
 
@@ -54,6 +106,12 @@ def index_document(
 
     # Read Markdown content
     markdown_text = input_path.read_text(encoding="utf-8")
+
+    # Check for unrecognized abbreviations
+    if check_abbreviations:
+        find_unrecognized_abbreviations(
+            markdown_text, ref_style, abbreviation_whitelist
+        )
 
     # Setup versiref parser
     try:

@@ -60,7 +60,19 @@ def main():
     show_default=True,
     help="Named reference style (e.g., en-sbl, en-cmos_short)",
 )
-def index(input_file, output_file, metadata_file, style):
+@click.option(
+    "--no-check-abbreviations",
+    is_flag=True,
+    help="Disable checking for unrecognized Bible abbreviations",
+)
+@click.option(
+    "--whitelist",
+    default=None,
+    help="Comma-separated abbreviations to ignore (e.g., 'PL,SC')",
+)
+def index(
+    input_file, output_file, metadata_file, style, no_check_abbreviations, whitelist
+):
     """Index a Markdown document into a searchable database.
 
     Creates a SQLite database with indexed Bible references and content blocks
@@ -70,12 +82,18 @@ def index(input_file, output_file, metadata_file, style):
         ref_style = RefStyle.named(style)
         metadata = _load_metadata(metadata_file)
 
+        whitelist_list = (
+            [s.strip() for s in whitelist.split(",")] if whitelist else None
+        )
+
         click.echo(f"Indexing {input_file}...")
         index_document(
             input_path=input_file,
             output_path=output_file,
             metadata=metadata,
             ref_style=ref_style,
+            check_abbreviations=not no_check_abbreviations,
+            abbreviation_whitelist=whitelist_list,
         )
 
         # Get and display stats
