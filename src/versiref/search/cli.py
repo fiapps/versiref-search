@@ -61,7 +61,7 @@ def main():
     help="Named reference style (e.g., en-sbl, en-cmos_short)",
 )
 @click.option(
-    "--no-check-abbreviations",
+    "--skip-abbreviations-check",
     is_flag=True,
     help="Disable checking for unrecognized Bible abbreviations",
 )
@@ -71,7 +71,7 @@ def main():
     help="Comma-separated abbreviations to ignore (e.g., 'PL,SC')",
 )
 def index(
-    input_file, output_file, metadata_file, style, no_check_abbreviations, whitelist
+    input_file, output_file, metadata_file, style, skip_abbreviations_check, whitelist
 ):
     """Index a Markdown document into a searchable database.
 
@@ -92,7 +92,7 @@ def index(
             output_path=output_file,
             metadata=metadata,
             ref_style=ref_style,
-            check_abbreviations=not no_check_abbreviations,
+            check_abbreviations=not skip_abbreviations_check,
             abbreviation_whitelist=whitelist_list,
         )
 
