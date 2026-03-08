@@ -27,6 +27,21 @@ def _load_metadata(path: Path) -> dict:
     return data
 
 
+def _load_config(path: Path) -> dict:
+    """Load an indexing config from a YAML file.
+
+    Resolves the ``metadata`` path relative to the config file's directory.
+    """
+    text = path.read_text(encoding="utf-8")
+    data = yaml.safe_load(text)
+    if not isinstance(data, dict):
+        raise ValueError(f"Config file must contain a YAML mapping: {path}")
+    # Resolve metadata path relative to config file location
+    if "metadata" in data and data["metadata"] is not None:
+        data["metadata"] = path.parent / data["metadata"]
+    return data
+
+
 @click.group()
 @click.version_option()
 def main():
@@ -50,15 +65,22 @@ def main():
     "-m",
     "--metadata",
     "metadata_file",
-    required=True,
+    default=None,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help="YAML metadata file (must contain 'title' and 'versification')",
 )
 @click.option(
+    "-c",
+    "--config",
+    "config_file",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="YAML config file with indexing options (metadata, style, whitelist, etc.)",
+)
+@click.option(
     "--style",
-    default="en-cmos_short",
-    show_default=True,
-    help="Named reference style (e.g., en-sbl, en-cmos_short)",
+    default=None,
+    help="Named reference style (e.g., en-sbl, en-cmos_short) [default: en-cmos_short]",
 )
 @click.option(
     "--skip-abbreviations-check",
@@ -71,20 +93,53 @@ def main():
     help="Comma-separated abbreviations to ignore (e.g., 'PL,SC')",
 )
 def index(
-    input_file, output_file, metadata_file, style, skip_abbreviations_check, whitelist
+    input_file,
+    output_file,
+    metadata_file,
+    config_file,
+    style,
+    skip_abbreviations_check,
+    whitelist,
 ):
     """Index a Markdown document into a searchable database.
 
     Creates a SQLite database with indexed Bible references and content blocks
-    from INPUT_FILE. Metadata is read from a YAML file specified with -m.
+    from INPUT_FILE. Metadata is read from a YAML file specified with -m or
+    from a config file specified with -c.
     """
     try:
-        ref_style = RefStyle.named(style)
-        metadata = _load_metadata(metadata_file)
+        config: dict = {}
+        if config_file is not None:
+            config = _load_config(config_file)
 
-        whitelist_list = (
-            [s.strip() for s in whitelist.split(",")] if whitelist else None
-        )
+        # Resolve metadata: CLI --metadata overrides config
+        meta_path = metadata_file or config.get("metadata")
+        if meta_path is None:
+            raise click.UsageError(
+                "Metadata must be provided via --metadata or in the config file."
+            )
+        metadata = _load_metadata(Path(meta_path))
+
+        # Resolve style: CLI --style overrides config
+        style_value = style if style is not None else config.get("style")
+        if style_value is None:
+            style_value = "en-cmos_short"
+        if isinstance(style_value, dict):
+            ref_style = RefStyle.from_dict(style_value)
+        else:
+            ref_style = RefStyle.named(style_value)
+
+        # Resolve whitelist: CLI --whitelist overrides config
+        if whitelist is not None:
+            whitelist_list = [s.strip() for s in whitelist.split(",")]
+        elif "abbreviations_whitelist" in config:
+            whitelist_list = config["abbreviations_whitelist"]
+        else:
+            whitelist_list = None
+
+        # Resolve skip_abbreviations_check: CLI flag overrides config
+        if not skip_abbreviations_check and config.get("skip_abbreviations_check"):
+            skip_abbreviations_check = True
 
         click.echo(f"Indexing {input_file}...")
         index_document(
@@ -103,6 +158,8 @@ def index(
         click.echo(f"  References: {stats['reference_count']}")
         click.echo(f"  Title: {stats['metadata'].get('title', 'N/A')}")
 
+    except click.UsageError:
+        raise
     except FileNotFoundError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
