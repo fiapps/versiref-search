@@ -23,13 +23,13 @@ Third paragraph with no references.
 
 @pytest.fixture(scope="session")
 def ref_style():
-    """Standard reference style used across tests."""
+    """Return the standard reference style used across tests."""
     return RefStyle.named("en-cmos_short")
 
 
 @pytest.fixture
 def minimal_md(tmp_path):
-    """A small Markdown file with two Bible references in separate paragraphs."""
+    """Create a small Markdown file with two Bible references in separate paragraphs."""
     path = tmp_path / "test.md"
     path.write_text(MINIMAL_MD_CONTENT, encoding="utf-8")
     return path

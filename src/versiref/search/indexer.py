@@ -84,6 +84,8 @@ def index_document(
             "versification" keys. Values may be strings or lists
             (lists are joined with " and ").
         ref_style: RefStyle to use for parsing Bible references
+        check_abbreviations: If True, warn about unrecognized abbreviations
+        abbreviation_whitelist: Abbreviations to exclude from the check
 
     Raises:
         FileNotFoundError: If input file doesn't exist
