@@ -177,7 +177,10 @@ def index(
 
 @main.command()
 @click.argument(
-    "database", type=click.Path(exists=True, dir_okay=False, path_type=Path)
+    "databases",
+    nargs=-1,
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
     "-r",
@@ -201,8 +204,8 @@ def index(
     help="Versification scheme of the query reference (e.g., eng, lxx). "
     "When set, the reference is mapped to the database's scheme automatically.",
 )
-def search(database, reference, string, no_headings, style, versification):
-    """Search a database for Bible references and/or text strings.
+def search(databases, reference, string, no_headings, style, versification):
+    """Search one or more databases for Bible references and/or text strings.
 
     At least one of --reference or --string must be provided.
     Results are returned in document order with heading context.
@@ -215,26 +218,41 @@ def search(database, reference, string, no_headings, style, versification):
 
     try:
         ref_style = RefStyle.named(style)
+        multi = len(databases) > 1
+        total_count = 0
 
-        results = search_database(
-            db_path=database,
-            ref_style=ref_style,
-            reference_query=reference,
-            string_query=string,
-            include_headings=not no_headings,
-            query_versification=versification,
-        )
+        for db_index, database in enumerate(databases):
+            results = search_database(
+                db_path=database,
+                ref_style=ref_style,
+                reference_query=reference,
+                string_query=string,
+                include_headings=not no_headings,
+                query_versification=versification,
+            )
+            total_count += len(results)
 
-        if not results:
-            click.echo("No results found.")
-            return
+            if multi:
+                if db_index > 0:
+                    click.echo()
+                click.echo(f"--- {database.stem} ---")
+                if not results:
+                    click.echo("No results found.")
+                    continue
+                click.echo(f"Found {len(results)} result(s):\n")
+            else:
+                if not results:
+                    click.echo("No results found.")
+                    return
+                click.echo(f"Found {len(results)} result(s):\n")
 
-        # Display results
-        click.echo(f"Found {len(results)} result(s):\n")
-        for i, result in enumerate(results, 1):
-            if i > 1:
-                click.echo("\n" + "=" * 80 + "\n")
-            click.echo(result.format_for_display(show_headings=not no_headings))
+            for i, result in enumerate(results, 1):
+                if i > 1:
+                    click.echo("\n" + "=" * 80 + "\n")
+                click.echo(result.format_for_display(show_headings=not no_headings))
+
+        if multi and total_count == 0:
+            click.echo("\nNo results found in any database.")
 
     except FileNotFoundError as e:
         click.echo(f"Error: {e}", err=True)
