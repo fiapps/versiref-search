@@ -13,6 +13,7 @@ dependencies = [
     "versiref>=0.3.0",
     "click>=8.1.0",
     "mistune>=3.0.0",
+    "pyyaml>=6.0.3",
 ]
 
 [project.scripts]

@@ -14,8 +14,7 @@ def test_missing_input_raises(tmp_path, ref_style):
         index_document(
             input_path=tmp_path / "nonexistent.md",
             output_path=tmp_path / "out.db",
-            versification="eng",
-            title="Test",
+            metadata={"title": "Test", "versification": "eng"},
             ref_style=ref_style,
         )
 
@@ -25,8 +24,7 @@ def test_invalid_versification_raises(tmp_path, minimal_md, ref_style):
         index_document(
             input_path=minimal_md,
             output_path=tmp_path / "out.db",
-            versification="not_a_real_scheme",
-            title="Test",
+            metadata={"title": "Test", "versification": "not_a_real_scheme"},
             ref_style=ref_style,
         )
 
@@ -37,8 +35,7 @@ def test_creates_database_file(tmp_path, minimal_md, ref_style):
     index_document(
         input_path=minimal_md,
         output_path=db_path,
-        versification="eng",
-        title="Test",
+        metadata={"title": "Test", "versification": "eng"},
         ref_style=ref_style,
     )
     assert db_path.exists()
@@ -70,8 +67,7 @@ def test_author_omitted_when_not_provided(tmp_path, minimal_md, ref_style):
     index_document(
         input_path=minimal_md,
         output_path=db_path,
-        versification="eng",
-        title="No Author",
+        metadata={"title": "No Author", "versification": "eng"},
         ref_style=ref_style,
     )
     meta = get_index_stats(db_path)["metadata"]
@@ -83,14 +79,57 @@ def test_get_index_stats_missing_db(tmp_path):
         get_index_stats(tmp_path / "nonexistent.db")
 
 
+def test_list_metadata_joined(tmp_path, minimal_md, ref_style):
+    db_path = tmp_path / "out.db"
+    index_document(
+        input_path=minimal_md,
+        output_path=db_path,
+        metadata={
+            "title": "Test",
+            "versification": "eng",
+            "author": ["Alice", "Bob"],
+        },
+        ref_style=ref_style,
+    )
+    meta = get_index_stats(db_path)["metadata"]
+    assert meta["author"] == "Alice and Bob"
+
+
+def test_extra_metadata_stored(tmp_path, minimal_md, ref_style):
+    db_path = tmp_path / "out.db"
+    index_document(
+        input_path=minimal_md,
+        output_path=db_path,
+        metadata={
+            "title": "Test",
+            "versification": "eng",
+            "translator": ["Paul Spilsbury"],
+            "date": 2006,
+        },
+        ref_style=ref_style,
+    )
+    meta = get_index_stats(db_path)["metadata"]
+    assert meta["translator"] == "Paul Spilsbury"
+    assert meta["date"] == "2006"
+
+
+def test_missing_required_metadata_raises(tmp_path, minimal_md, ref_style):
+    with pytest.raises(ValueError, match="title"):
+        index_document(
+            input_path=minimal_md,
+            output_path=tmp_path / "out.db",
+            metadata={"versification": "eng"},
+            ref_style=ref_style,
+        )
+
+
 def test_sample_file_block_and_reference_counts(tmp_path, ref_style):
     """Integration test: index the actual sample file and verify known counts."""
     db_path = tmp_path / "speculum.db"
     index_document(
         input_path=SAMPLE_MD,
         output_path=db_path,
-        versification="eng",
-        title="Speculum BVM",
+        metadata={"title": "Speculum BVM", "versification": "eng"},
         ref_style=ref_style,
     )
     stats = get_index_stats(db_path)

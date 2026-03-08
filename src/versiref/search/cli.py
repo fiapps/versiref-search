@@ -3,10 +3,28 @@
 import sys
 from pathlib import Path
 import click
+import yaml
 from versiref import RefStyle
 
 from .indexer import index_document, get_index_stats
 from .searcher import search_database, get_context
+
+
+def _load_metadata(path: Path) -> dict:
+    """Load metadata from a YAML file.
+
+    The file may optionally use YAML front-matter delimiters (``---``).
+    """
+    text = path.read_text(encoding="utf-8")
+    # Strip optional front-matter fences
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) >= 3:
+            text = parts[1]
+    data = yaml.safe_load(text)
+    if not isinstance(data, dict):
+        raise ValueError(f"Metadata file must contain a YAML mapping: {path}")
+    return data
 
 
 @click.group()
@@ -29,35 +47,35 @@ def main():
     help="Output SQLite database file",
 )
 @click.option(
-    "--versification", default="eng", help="Versification scheme (default: eng)"
+    "-m",
+    "--metadata",
+    "metadata_file",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="YAML metadata file (must contain 'title' and 'versification')",
 )
-@click.option("--title", required=True, help="Document title")
-@click.option("--lang", default="en", help="Language code (default: en)")
-@click.option("--author", help="Document author")
 @click.option(
     "--style",
     default="en-cmos_short",
     show_default=True,
     help="Named reference style (e.g., en-sbl, en-cmos_short)",
 )
-def index(input_file, output_file, versification, title, lang, author, style):
+def index(input_file, output_file, metadata_file, style):
     """Index a Markdown document into a searchable database.
 
     Creates a SQLite database with indexed Bible references and content blocks
-    from INPUT_FILE.
+    from INPUT_FILE. Metadata is read from a YAML file specified with -m.
     """
     try:
         ref_style = RefStyle.named(style)
+        metadata = _load_metadata(metadata_file)
 
         click.echo(f"Indexing {input_file}...")
         index_document(
             input_path=input_file,
             output_path=output_file,
-            versification=versification,
-            title=title,
+            metadata=metadata,
             ref_style=ref_style,
-            lang=lang,
-            author=author,
         )
 
         # Get and display stats

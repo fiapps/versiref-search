@@ -42,10 +42,12 @@ def indexed_db(tmp_path, minimal_md, ref_style):
     index_document(
         input_path=minimal_md,
         output_path=db_path,
-        versification="eng",
-        title="Test Document",
+        metadata={
+            "title": "Test Document",
+            "versification": "eng",
+            "lang": "en",
+            "author": "Test Author",
+        },
         ref_style=ref_style,
-        lang="en",
-        author="Test Author",
     )
     return db_path

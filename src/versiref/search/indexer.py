@@ -7,33 +7,46 @@ from .database import Database, SCHEMA_VERSION
 from .markdown_parser import parse_markdown
 
 
+def _normalize_metadata_value(value: object) -> str:
+    """Normalize a metadata value to a string.
+
+    Lists are joined with " and " (similar to BibTeX name fields).
+    """
+    if isinstance(value, list):
+        return " and ".join(str(v) for v in value)
+    return str(value)
+
+
 def index_document(
     input_path: str | Path,
     output_path: str | Path,
-    versification: str,
-    title: str,
+    metadata: dict[str, object],
     ref_style: RefStyle,
-    lang: str = "en",
-    author: str | None = None,
 ) -> None:
     """Index a Markdown document into a SQLite database.
 
     Args:
         input_path: Path to input Markdown file
         output_path: Path to output SQLite database file
-        versification: Versification identifier (e.g., "eng", "org")
-        title: Document title
+        metadata: Document metadata dict. Must contain "title" and
+            "versification" keys. Values may be strings or lists
+            (lists are joined with " and ").
         ref_style: RefStyle to use for parsing Bible references
-        lang: Language code (default: "en")
-        author: Optional author name
 
     Raises:
         FileNotFoundError: If input file doesn't exist
-        ValueError: If versification is invalid
+        ValueError: If versification is invalid or required keys missing
 
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
+
+    # Validate required metadata keys
+    for key in ("title", "versification"):
+        if key not in metadata:
+            raise ValueError(f"Metadata must contain '{key}'")
+
+    versification = str(metadata["versification"])
 
     # Validate input file exists
     if not input_path.exists():
@@ -59,12 +72,12 @@ def index_document(
         db.create_schema()
 
         # Set metadata
-        db.set_metadata("title", title)
-        db.set_metadata("versification_scheme", versification)
-        db.set_metadata("lang", lang)
         db.set_metadata("schema_version", SCHEMA_VERSION)
-        if author:
-            db.set_metadata("author", author)
+        db.set_metadata("versification_scheme", versification)
+        for key, value in metadata.items():
+            if key == "versification":
+                continue  # already stored as versification_scheme
+            db.set_metadata(key, _normalize_metadata_value(value))
 
         # Index each block
         for block in blocks:
