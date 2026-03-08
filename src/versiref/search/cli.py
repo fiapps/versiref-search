@@ -194,7 +194,14 @@ def index(
     show_default=True,
     help="Named reference style (e.g., en-sbl, en-cmos_short)",
 )
-def search(database, reference, string, no_headings, style):
+@click.option(
+    "-v",
+    "--versification",
+    default=None,
+    help="Versification scheme of the query reference (e.g., eng, lxx). "
+    "When set, the reference is mapped to the database's scheme automatically.",
+)
+def search(database, reference, string, no_headings, style, versification):
     """Search a database for Bible references and/or text strings.
 
     At least one of --reference or --string must be provided.
@@ -215,6 +222,7 @@ def search(database, reference, string, no_headings, style):
             reference_query=reference,
             string_query=string,
             include_headings=not no_headings,
+            query_versification=versification,
         )
 
         if not results:

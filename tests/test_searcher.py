@@ -1,5 +1,7 @@
 """Tests for the searcher module."""
 
+from unittest.mock import patch, MagicMock
+
 import pytest
 
 from versiref.search import get_context, search_database
@@ -159,3 +161,74 @@ def test_get_context_empty_range(indexed_db):
 def test_get_context_missing_db(tmp_path):
     with pytest.raises(FileNotFoundError):
         get_context(tmp_path / "nonexistent.db", start_id=1, end_id=5)
+
+
+# --- Versification mapping ---
+
+
+def test_query_versification_none_uses_db_scheme(indexed_db, ref_style):
+    """Default query_versification=None uses the database's own scheme."""
+    results = search_database(
+        indexed_db, ref_style, reference_query="Lk 1:28", query_versification=None
+    )
+    assert len(results) == 1
+    assert "Lk 1:28" in results[0].block_text
+
+
+def test_query_versification_same_as_db(indexed_db, ref_style):
+    """When query_versification matches the db scheme, no mapping is needed."""
+    results = search_database(
+        indexed_db, ref_style, reference_query="Lk 1:28", query_versification="eng"
+    )
+    assert len(results) == 1
+    assert "Lk 1:28" in results[0].block_text
+
+
+def test_query_versification_different_from_db(tmp_path, ref_style):
+    """When query_versification differs, the reference is mapped to the db scheme."""
+    from versiref import Versification, RefParser
+    from versiref.search import index_document
+
+    # Index a document using lxx versification.
+    # In LXX, Ps 22:1 corresponds to eng Ps 23:1.
+    md_path = tmp_path / "lxx_test.md"
+    md_path.write_text("# Test\n\nA paragraph citing Ps 22:1.\n", encoding="utf-8")
+    db_path = tmp_path / "lxx_test.db"
+
+    # Build a parser for lxx to verify the reference parses there
+    v_lxx = Versification.named("lxx")
+    p = RefParser(ref_style, v_lxx)
+    ref = p.parse("Ps 22:1")
+    assert ref is not None
+
+    index_document(
+        input_path=md_path,
+        output_path=db_path,
+        metadata={"title": "LXX Test", "versification": "lxx", "lang": "en"},
+        ref_style=ref_style,
+    )
+
+    # Search using eng versification for Ps 23:1 — should map to lxx Ps 22:1
+    results = search_database(
+        db_path, ref_style, reference_query="Ps 23:1", query_versification="eng"
+    )
+    assert len(results) == 1
+    assert "Ps 22:1" in results[0].block_text
+
+
+def test_query_versification_map_to_returns_none(indexed_db, ref_style):
+    """When map_to() returns None, a ValueError is raised."""
+    with patch("versiref.search.searcher.RefParser") as mock_parser_cls:
+        mock_ref = MagicMock()
+        mock_ref.map_to.return_value = None
+        mock_parser = MagicMock()
+        mock_parser.parse.return_value = mock_ref
+        mock_parser_cls.return_value = mock_parser
+
+        with pytest.raises(ValueError, match="Could not map reference"):
+            search_database(
+                indexed_db,
+                ref_style,
+                reference_query="Ps 23:1",
+                query_versification="lxx",
+            )

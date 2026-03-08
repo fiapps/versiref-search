@@ -13,6 +13,7 @@ def search_database(
     reference_query: str | None = None,
     string_query: str | None = None,
     include_headings: bool = True,
+    query_versification: str | None = None,
 ) -> list[SearchResult]:
     """Search a database for Bible references and/or text strings.
 
@@ -22,6 +23,10 @@ def search_database(
         reference_query: Bible reference to search for (e.g., "Romans 3", "Isaiah 7:14")
         string_query: Text string to search for (FTS5 word-boundary matching)
         include_headings: Whether to include heading context in results
+        query_versification: Versification scheme of the query reference. When
+            provided and different from the database's scheme, the parsed
+            reference is mapped to the database's scheme via ``map_to()``.
+            When ``None``, the database's own scheme is used to parse the query.
 
     Returns:
         List of SearchResult objects in document order
@@ -29,7 +34,7 @@ def search_database(
     Raises:
         FileNotFoundError: If database doesn't exist
         ValueError: If neither reference_query nor string_query is provided,
-            or if reference_query is invalid
+            or if reference_query is invalid, or if versification mapping fails
 
     """
     if reference_query is None and string_query is None:
@@ -54,8 +59,14 @@ def search_database(
 
         # Search by reference if provided
         if reference_query:
-            versification = Versification.named(versification_name)
-            parser = RefParser(ref_style, versification)
+            db_versification = Versification.named(versification_name)
+
+            if query_versification is not None:
+                parse_versification = Versification.named(query_versification)
+            else:
+                parse_versification = db_versification
+
+            parser = RefParser(ref_style, parse_versification)
 
             try:
                 ref = parser.parse(reference_query, silent=False)
@@ -64,6 +75,19 @@ def search_database(
 
             if ref is None:
                 raise ValueError(f"Could not parse reference query '{reference_query}'")
+
+            # Map to database versification if needed
+            if (
+                query_versification is not None
+                and query_versification != versification_name
+            ):
+                mapped = ref.map_to(db_versification)
+                if mapped is None:
+                    raise ValueError(
+                        f"Could not map reference '{reference_query}' "
+                        f"from '{query_versification}' to '{versification_name}'"
+                    )
+                ref = mapped
 
             for verse_start, verse_end in ref.range_keys():
                 ref_results = db.search_by_reference_range(verse_start, verse_end)
