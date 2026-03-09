@@ -267,6 +267,34 @@ def search(databases, reference, string, no_headings, style, versification):
 
 @main.command()
 @click.argument(
+    "databases",
+    nargs=-1,
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+def info(databases):
+    """Display metadata and statistics for one or more databases."""
+    try:
+        for db_index, database in enumerate(databases):
+            if db_index > 0:
+                click.echo()
+            if len(databases) > 1:
+                click.echo(f"--- {database.stem} ---")
+            stats = get_index_stats(database)
+            for key, value in stats["metadata"].items():
+                click.echo(f"  {key}: {value}")
+            click.echo(f"  blocks: {stats['block_count']}")
+            click.echo(f"  references: {stats['reference_count']}")
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Unexpected error: {e}", err=True)
+        sys.exit(1)
+
+
+@main.command()
+@click.argument(
     "database", type=click.Path(exists=True, dir_okay=False, path_type=Path)
 )
 @click.option("--start", required=True, type=int, help="Starting block ID (inclusive)")

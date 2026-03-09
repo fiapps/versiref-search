@@ -1,4 +1,4 @@
-"""Tests for the CLI search command."""
+"""Tests for the CLI commands."""
 
 from pathlib import Path
 
@@ -95,3 +95,31 @@ def test_search_no_query(tmp_path):
     runner = CliRunner()
     result = runner.invoke(main, ["search", str(db)])
     assert result.exit_code != 0
+
+
+# --- info command ---
+
+
+def test_info_single_database(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["info", str(db)])
+    assert result.exit_code == 0
+    assert "title: Document A" in result.output
+    assert "versification_scheme: eng" in result.output
+    assert "blocks:" in result.output
+    assert "references:" in result.output
+    # Single database should not show a header
+    assert "---" not in result.output
+
+
+def test_info_multiple_databases(tmp_path):
+    db_a = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    db_b = _make_db(tmp_path, "doc_b", MINIMAL_MD_B, "Document B")
+    runner = CliRunner()
+    result = runner.invoke(main, ["info", str(db_a), str(db_b)])
+    assert result.exit_code == 0
+    assert "--- doc_a ---" in result.output
+    assert "--- doc_b ---" in result.output
+    assert "title: Document A" in result.output
+    assert "title: Document B" in result.output
