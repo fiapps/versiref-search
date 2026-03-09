@@ -51,7 +51,10 @@ def main():
 
 @main.command()
 @click.argument(
-    "input_file", type=click.Path(exists=True, dir_okay=False, path_type=Path)
+    "input_files",
+    nargs=-1,
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
     "-o",
@@ -93,7 +96,7 @@ def main():
     help="Comma-separated abbreviations to ignore (e.g., 'PL,SC')",
 )
 def index(
-    input_file,
+    input_files,
     output_file,
     metadata_file,
     config_file,
@@ -101,10 +104,11 @@ def index(
     skip_abbreviations_check,
     whitelist,
 ):
-    """Index a Markdown document into a searchable database.
+    """Index one or more Markdown documents into a searchable database.
 
     Creates a SQLite database with indexed Bible references and content blocks
-    from INPUT_FILE. Metadata is read from a YAML file specified with -m or
+    from INPUT_FILES. Each file is indexed separately and appended to the
+    database in order. Metadata is read from a YAML file specified with -m or
     from a config file specified with -c.
     """
     try:
@@ -145,15 +149,16 @@ def index(
         if not skip_abbreviations_check and config.get("skip_abbreviations_check"):
             skip_abbreviations_check = True
 
-        click.echo(f"Indexing {input_file}...")
-        index_document(
-            input_path=input_file,
-            output_path=output_file,
-            metadata=metadata,
-            ref_style=ref_style,
-            check_abbreviations=not skip_abbreviations_check,
-            abbreviation_whitelist=whitelist_list,
-        )
+        for input_file in input_files:
+            click.echo(f"Indexing {input_file}...")
+            index_document(
+                input_path=input_file,
+                output_path=output_file,
+                metadata=metadata,
+                ref_style=ref_style,
+                check_abbreviations=not skip_abbreviations_check,
+                abbreviation_whitelist=whitelist_list,
+            )
 
         # Get and display stats
         stats = get_index_stats(output_file)
