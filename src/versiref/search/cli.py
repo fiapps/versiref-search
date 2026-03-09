@@ -44,7 +44,7 @@ def _load_config(path: Path) -> dict:
 
 @click.group()
 @click.version_option(package_name="versiref-search")
-def main():
+def main() -> None:
     """Search texts for Bible references with versiref."""
     pass
 
@@ -96,14 +96,14 @@ def main():
     help="Comma-separated abbreviations to ignore (e.g., 'PL,SC')",
 )
 def index(
-    input_files,
-    output_file,
-    metadata_file,
-    config_file,
-    style,
-    skip_abbreviations_check,
-    whitelist,
-):
+    input_files: tuple[Path, ...],
+    output_file: Path,
+    metadata_file: Path | None,
+    config_file: Path | None,
+    style: str | None,
+    skip_abbreviations_check: bool,
+    whitelist: str | None,
+) -> None:
     """Index one or more Markdown documents into a searchable database.
 
     Creates a SQLite database with indexed Bible references and content blocks
@@ -209,7 +209,14 @@ def index(
     help="Versification scheme of the query reference (e.g., eng, lxx). "
     "When set, the reference is mapped to the database's scheme automatically.",
 )
-def search(databases, reference, string, no_headings, style, versification):
+def search(
+    databases: tuple[Path, ...],
+    reference: str | None,
+    string: str | None,
+    no_headings: bool,
+    style: str,
+    versification: str | None,
+) -> None:
     """Search one or more databases for Bible references and/or text strings.
 
     At least one of --reference or --string must be provided.
@@ -277,7 +284,7 @@ def search(databases, reference, string, no_headings, style, versification):
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
-def info(databases):
+def info(databases: tuple[Path, ...]) -> None:
     """Display metadata and statistics for one or more databases."""
     try:
         for db_index, database in enumerate(databases):
@@ -309,7 +316,7 @@ def info(databases):
     is_flag=True,
     help="Include preceding headings before the range",
 )
-def context(database, start, end, include_headings):
+def context(database: Path, start: int, end: int, include_headings: bool) -> None:
     """Retrieve a range of content blocks with optional heading context.
 
     Returns blocks from START to END (inclusive) in document order.
