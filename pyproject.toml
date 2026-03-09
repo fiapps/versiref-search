@@ -6,6 +6,21 @@ readme = "README.md"
 authors = [
     { name = "Fr. John Lawrence M. Polis", email = "emptier-sank-dose@duck.com" }
 ]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Religion",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Religion",
+    "Topic :: Text Processing",
+]
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
@@ -18,6 +33,10 @@ dependencies = [
 
 [project.scripts]
 versiref-search = "versiref.search.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/fiapps/versiref-search"
+Issues = "https://github.com/fiapps/versiref-search/issues"
 
 [build-system]
 requires = ["uv_build>=0.9.28,<0.10.0"]
@@ -37,6 +56,12 @@ ignore = ["D203", "D213"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D101", "D102", "D103"]
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
 
 [dependency-groups]
 dev = [
