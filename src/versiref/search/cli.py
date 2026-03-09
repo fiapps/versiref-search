@@ -43,7 +43,7 @@ def _load_config(path: Path) -> dict:
 
 
 @click.group()
-@click.version_option()
+@click.version_option(package_name="versiref-search")
 def main():
     """Search texts for Bible references with versiref."""
     pass
