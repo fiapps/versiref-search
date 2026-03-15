@@ -62,3 +62,27 @@ class SearchResult:
         lines.append(self.block_text)
 
         return "\n".join(lines)
+
+    def format_xml(self, show_headings: bool = True) -> str:
+        """Format the search result as XML-delimited Markdown.
+
+        Args:
+            show_headings: Whether to include heading context
+
+        Returns:
+            XML-formatted string
+
+        """
+        lines = ["<result>"]
+
+        if show_headings and self.heading_context:
+            for level in sorted(self.heading_context.keys()):
+                heading = self.heading_context[level]
+                lines.append(heading.text.strip())
+
+        lines.append(f'<block n="{self.block_id}">')
+        lines.append(self.block_text)
+        lines.append("</block>")
+        lines.append("</result>")
+
+        return "\n".join(lines)

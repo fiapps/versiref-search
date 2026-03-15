@@ -180,6 +180,55 @@ def index(
         sys.exit(1)
 
 
+def _output_search_plain(
+    all_db_results: list[tuple[Path, list]],
+    total_count: int,
+    show_headings: bool,
+) -> None:
+    """Output search results in plain text format."""
+    multi = len(all_db_results) > 1
+
+    for db_index, (database, results) in enumerate(all_db_results):
+        if multi:
+            if db_index > 0:
+                click.echo()
+            click.echo(f"--- {database.stem} ---")
+            if not results:
+                click.echo("No results found.")
+                continue
+            click.echo(f"Found {len(results)} result(s):\n")
+        else:
+            if not results:
+                click.echo("No results found.")
+                return
+            click.echo(f"Found {len(results)} result(s):\n")
+
+        for i, result in enumerate(results, 1):
+            if i > 1:
+                click.echo("\n" + "=" * 80 + "\n")
+            click.echo(result.format_for_display(show_headings=show_headings))
+
+    if multi and total_count == 0:
+        click.echo("\nNo results found in any database.")
+
+
+def _output_search_xml(
+    all_db_results: list[tuple[Path, list]],
+    total_count: int,
+    show_headings: bool,
+) -> None:
+    """Output search results in XML-delimited format."""
+    click.echo(f'<search-results count="{total_count}">')
+
+    for database, results in all_db_results:
+        click.echo(f'<source db="{database.stem}">')
+        for result in results:
+            click.echo(result.format_xml(show_headings=show_headings))
+        click.echo("</source>")
+
+    click.echo("</search-results>")
+
+
 @main.command()
 @click.argument(
     "databases",
@@ -209,6 +258,7 @@ def index(
     help="Versification scheme of the query reference (e.g., eng, lxx). "
     "When set, the reference is mapped to the database's scheme automatically.",
 )
+@click.option("--xml", is_flag=True, help="Output results in XML-delimited format")
 def search(
     databases: tuple[Path, ...],
     reference: str | None,
@@ -216,6 +266,7 @@ def search(
     no_headings: bool,
     style: str,
     versification: str | None,
+    xml: bool,
 ) -> None:
     """Search one or more databases for Bible references and/or text strings.
 
@@ -230,10 +281,10 @@ def search(
 
     try:
         ref_style = RefStyle.named(style)
-        multi = len(databases) > 1
         total_count = 0
 
-        for db_index, database in enumerate(databases):
+        all_db_results: list[tuple[Path, list]] = []
+        for database in databases:
             results = search_database(
                 db_path=database,
                 ref_style=ref_style,
@@ -243,28 +294,12 @@ def search(
                 query_versification=versification,
             )
             total_count += len(results)
+            all_db_results.append((database, results))
 
-            if multi:
-                if db_index > 0:
-                    click.echo()
-                click.echo(f"--- {database.stem} ---")
-                if not results:
-                    click.echo("No results found.")
-                    continue
-                click.echo(f"Found {len(results)} result(s):\n")
-            else:
-                if not results:
-                    click.echo("No results found.")
-                    return
-                click.echo(f"Found {len(results)} result(s):\n")
-
-            for i, result in enumerate(results, 1):
-                if i > 1:
-                    click.echo("\n" + "=" * 80 + "\n")
-                click.echo(result.format_for_display(show_headings=not no_headings))
-
-        if multi and total_count == 0:
-            click.echo("\nNo results found in any database.")
+        if xml:
+            _output_search_xml(all_db_results, total_count, not no_headings)
+        else:
+            _output_search_plain(all_db_results, total_count, not no_headings)
 
     except FileNotFoundError as e:
         click.echo(f"Error: {e}", err=True)
