@@ -193,6 +193,20 @@ class TestFindUnrecognizedAbbreviations:
             result = find_unrecognized_abbreviations(text, dot_style)
         assert "PL" in result
 
+    def test_digit_only_abbreviation_not_reported(self, ref_style, caplog):
+        """A pattern like '1 39:243' where the book part is purely digits should not be reported."""
+        text = "Column 1 39:243 is not a Bible reference."
+        with caplog.at_level(logging.WARNING, logger="versiref.search.indexer"):
+            result = find_unrecognized_abbreviations(text, ref_style)
+        assert result == {}
+
+    def test_whitelist_entry_suppresses_numbered_variant(self, ref_style, caplog):
+        """Whitelisting 'PL' should also suppress '1 PL', '3 PL', etc."""
+        text = "1 PL 39:243\n\n3 PL 12:5 for details."
+        with caplog.at_level(logging.WARNING, logger="versiref.search.indexer"):
+            result = find_unrecognized_abbreviations(text, ref_style, whitelist=["PL"])
+        assert result == {}
+
 
 class TestIndexDocumentAbbreviationCheck:
     def test_check_abbreviations_false_suppresses(self, tmp_path, ref_style, caplog):

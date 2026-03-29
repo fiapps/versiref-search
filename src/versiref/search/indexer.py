@@ -42,12 +42,18 @@ def find_unrecognized_abbreviations(
             abbrev = leading + book_name  # e.g., "1 Sam"
         else:
             abbrev = book_name
+        # Skip if the book_name part is purely digits (e.g. "1 39:243" is not a reference)
+        if book_name.isdigit():
+            continue
         # Skip if recognized (check full abbrev, or book_name part for numbered books)
         if abbrev in ref_style.recognized_names:
             continue
         if leading and book_name in ref_style.recognized_names:
             continue
         if abbrev in whitelist_set:
+            continue
+        # Also skip if the book_name part alone is whitelisted (covers "1 PL", "3 PL", etc.)
+        if leading and book_name in whitelist_set:
             continue
         if abbrev not in unrecognized:
             unrecognized[abbrev] = match.group(0)
