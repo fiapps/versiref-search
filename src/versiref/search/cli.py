@@ -160,6 +160,14 @@ def index(
                 f"Valid values: {valid}"
             )
 
+        # Resolve invalid_references from config
+        invalid_references = config.get("invalid_references", "warn")
+        if invalid_references not in ("warn", "exclude", "ignore"):
+            raise ValueError(
+                f"Invalid invalid_references '{invalid_references}'. "
+                f"Valid values: warn, exclude, ignore"
+            )
+
         for input_file in input_files:
             click.echo(f"Indexing {input_file}...")
             index_document(
@@ -168,6 +176,7 @@ def index(
                 metadata=metadata,
                 ref_style=ref_style,
                 parser_sensitivity=parser_sensitivity,
+                invalid_references=invalid_references,
                 check_abbreviations=not skip_abbreviations_check,
                 abbreviation_whitelist=whitelist_list,
             )

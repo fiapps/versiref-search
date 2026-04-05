@@ -2,6 +2,7 @@
 
 import logging
 import re
+from typing import Literal
 from pathlib import Path
 from versiref import Versification, RefParser, RefStyle, Sensitivity
 
@@ -9,6 +10,8 @@ from .database import Database, SCHEMA_VERSION
 from .markdown_parser import parse_markdown
 
 logger = logging.getLogger(__name__)
+
+InvalidRefAction = Literal["warn", "exclude", "ignore"]
 
 
 def find_unrecognized_abbreviations(
@@ -79,6 +82,7 @@ def index_document(
     ref_style: RefStyle,
     *,
     parser_sensitivity: Sensitivity = Sensitivity.VERSE,
+    invalid_references: InvalidRefAction = "warn",
     check_abbreviations: bool = True,
     abbreviation_whitelist: list[str] | None = None,
 ) -> None:
@@ -92,6 +96,10 @@ def index_document(
             (lists are joined with " and ").
         ref_style: RefStyle to use for parsing Bible references
         parser_sensitivity: Sensitivity level for reference scanning
+        invalid_references: How to handle invalid references (out-of-range
+            chapter/verse): "warn" to log and include, "exclude" to log and
+            skip, "ignore" to include silently. References to books not in
+            the versification are always excluded.
         check_abbreviations: If True, warn about unrecognized abbreviations
         abbreviation_whitelist: Abbreviations to exclude from the check
 
@@ -156,6 +164,32 @@ def index_document(
             for ref, start_pos, end_pos in parser.scan_string(
                 block.text, sensitivity=parser_sensitivity
             ):
+                # Check if all books in the ref are in the versification
+                if not all(vers.includes(sr.book_id) for sr in ref.simple_refs):
+                    ref_text = block.text[start_pos:end_pos]
+                    logger.warning(
+                        'Reference "%s" refers to a book not in the '
+                        '"%s" versification; excluding.',
+                        ref_text,
+                        versification,
+                    )
+                    continue
+
+                # Check validity (out-of-range chapter/verse)
+                if not ref.is_valid():
+                    ref_text = block.text[start_pos:end_pos]
+                    if invalid_references == "exclude":
+                        logger.warning(
+                            'Invalid reference "%s"; excluding.',
+                            ref_text,
+                        )
+                        continue
+                    elif invalid_references == "warn":
+                        logger.warning(
+                            'Invalid reference "%s"; including anyway.',
+                            ref_text,
+                        )
+
                 # Convert reference to integer range keys
                 for verse_start, verse_end in ref.range_keys():
                     # Insert reference index entry
