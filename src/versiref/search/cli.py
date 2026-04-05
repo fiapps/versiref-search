@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 import click
 import yaml
-from versiref import RefStyle
+from versiref import RefStyle, Sensitivity
 
 from .indexer import index_document, get_index_stats
 from .searcher import search_database, get_context
@@ -149,6 +149,17 @@ def index(
         if not skip_abbreviations_check and config.get("skip_abbreviations_check"):
             skip_abbreviations_check = True
 
+        # Resolve parser_sensitivity from config
+        sensitivity_value = config.get("parser_sensitivity", "verse")
+        try:
+            parser_sensitivity = Sensitivity[sensitivity_value.upper()]
+        except KeyError:
+            valid = ", ".join(s.name.lower() for s in Sensitivity)
+            raise ValueError(
+                f"Invalid parser_sensitivity '{sensitivity_value}'. "
+                f"Valid values: {valid}"
+            )
+
         for input_file in input_files:
             click.echo(f"Indexing {input_file}...")
             index_document(
@@ -156,6 +167,7 @@ def index(
                 output_path=output_file,
                 metadata=metadata,
                 ref_style=ref_style,
+                parser_sensitivity=parser_sensitivity,
                 check_abbreviations=not skip_abbreviations_check,
                 abbreviation_whitelist=whitelist_list,
             )

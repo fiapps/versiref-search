@@ -3,7 +3,7 @@
 import logging
 import re
 from pathlib import Path
-from versiref import Versification, RefParser, RefStyle
+from versiref import Versification, RefParser, RefStyle, Sensitivity
 
 from .database import Database, SCHEMA_VERSION
 from .markdown_parser import parse_markdown
@@ -78,6 +78,7 @@ def index_document(
     metadata: dict[str, object],
     ref_style: RefStyle,
     *,
+    parser_sensitivity: Sensitivity = Sensitivity.VERSE,
     check_abbreviations: bool = True,
     abbreviation_whitelist: list[str] | None = None,
 ) -> None:
@@ -90,6 +91,7 @@ def index_document(
             "versification" keys. Values may be strings or lists
             (lists are joined with " and ").
         ref_style: RefStyle to use for parsing Bible references
+        parser_sensitivity: Sensitivity level for reference scanning
         check_abbreviations: If True, warn about unrecognized abbreviations
         abbreviation_whitelist: Abbreviations to exclude from the check
 
@@ -151,7 +153,9 @@ def index_document(
             content_id = db.insert_content(block.text, block.heading_level)
 
             # Scan for Bible references in the block text
-            for ref, start_pos, end_pos in parser.scan_string(block.text):
+            for ref, start_pos, end_pos in parser.scan_string(
+                block.text, sensitivity=parser_sensitivity
+            ):
                 # Convert reference to integer range keys
                 for verse_start, verse_end in ref.range_keys():
                     # Insert reference index entry
