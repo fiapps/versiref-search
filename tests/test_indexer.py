@@ -12,7 +12,7 @@ from versiref.search import (
 )
 from versiref.search.database import SCHEMA_VERSION
 
-SAMPLE_MD = Path(__file__).parent / "data" / "speculum-bvm-ch01.md"
+SAMPLE_MD = Path(__file__).parent / "data" / "irenaeus-ah-3.21.md"
 
 
 def test_missing_input_raises(tmp_path, ref_style):
@@ -131,16 +131,16 @@ def test_missing_required_metadata_raises(tmp_path, minimal_md, ref_style):
 
 def test_sample_file_block_and_reference_counts(tmp_path, ref_style):
     """Integration test: index the actual sample file and verify known counts."""
-    db_path = tmp_path / "speculum.db"
+    db_path = tmp_path / "irenaeus.db"
     index_document(
         input_path=SAMPLE_MD,
         output_path=db_path,
-        metadata={"title": "Speculum BVM", "versification": "eng"},
+        metadata={"title": "Irenaeus AH 3.21", "versification": "eng"},
         ref_style=ref_style,
     )
     stats = get_index_stats(db_path)
-    assert stats["block_count"] == 17
-    assert stats["reference_count"] == 4
+    assert stats["block_count"] == 13
+    assert stats["reference_count"] == 5
 
 
 # --- Tests for find_unrecognized_abbreviations ---
