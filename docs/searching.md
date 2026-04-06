@@ -1,0 +1,148 @@
+# Searching Databases
+
+versiref-search databases are SQLite files containing indexed Bible references and text content from source documents.
+You can search them by Bible reference, by text string, or both.
+
+## Quick Start (CLI)
+
+Search a database for a Bible reference:
+
+```sh
+versiref-search search mybook.db -r "Romans 3:23"
+```
+
+Search for a text string (or any SQLite FTS5 search expression):
+
+```sh
+versiref-search search mybook.db -s "justification"
+```
+
+Combine both (results must match both criteria):
+
+```sh
+versiref-search search mybook.db -r "Romans 3" -s "faith"
+```
+
+Search multiple databases at once:
+
+```sh
+versiref-search search book1.db book2.db -r "Ps 23"
+```
+
+## Search Results
+
+Results are returned in document order.
+Each result includes:
+
+- **Heading context**: the most recent heading at each level preceding the matched block, giving you the section structure.
+- **Block text**: the Markdown content of the matched block. For string searches, matched words are wrapped in `<mark>` tags.
+- **Block ID**: a sequential identifier that can be used with the `context` command to retrieve surrounding content.
+
+### Plain Text Output
+
+The default output shows heading context, a block ID, and the block text.
+Multiple results are separated by a line of `=` characters.
+
+### XML Output
+
+Use `--xml` for machine-readable output, useful for LLM tool integration:
+
+```sh
+versiref-search search mybook.db -r "Ps 23" --xml
+```
+
+Output structure:
+
+```xml
+<search-results count="2">
+<source db="mybook">
+<result>
+## Chapter Title
+### Section Title
+<block n="42">
+Content of the matched block...
+</block>
+</result>
+</source>
+</search-results>
+```
+
+## Reference Search
+
+Reference search finds content blocks that were indexed with overlapping Bible references.
+A query for "Isaiah 7:14" will match blocks citing "Isaiah 7:14", "Isaiah 7:7-16", or any range that overlaps with the queried verse(s).
+
+The `--style` option controls how your query reference is parsed.
+It defaults to `en-cmos_short` (Chicago Manual of Style short abbreviations).
+Other options include `en-sbl` (Society of Biblical Literature).
+The style only affects how the *query* is interpreted; it does not need to match the style used when the database was built.
+
+### Cross-Versification Search
+
+Databases store which versification scheme they use (e.g., `eng`, `lxx`).
+If your query uses a different scheme, use `-v` to specify it:
+
+```sh
+versiref-search search lxx-text.db -r "Ps 23" -v eng
+```
+
+This maps the reference from the `eng` scheme to whatever scheme the database uses before searching.
+
+## String Search
+
+String search uses SQLite FTS5 for word-boundary matching.
+It is case-insensitive but matches whole words, not substrings.
+For example, searching for "grace" will not match "disgrace".
+
+Matched words in results are wrapped in `<mark>` tags so you can identify which words matched.
+
+## Retrieving Context
+
+When a search result looks relevant but you need more surrounding text, use the `context` command with block IDs:
+
+```sh
+versiref-search context mybook.db --start 40 --end 45
+```
+
+Add `--include-headings` to prepend the heading context for the range.
+
+## Database Info
+
+To see metadata and statistics for a database:
+
+```sh
+versiref-search info mybook.db
+```
+
+This shows the title, versification scheme, and other metadata, along with block and reference counts.
+
+## Options Reference
+
+### `search` Command
+
+| Option | Description |
+|--------|-------------|
+| `-r`, `--reference` | Bible reference to search for |
+| `-s`, `--string` | Text string to search for (FTS5 word-boundary, case-insensitive) |
+| `--style` | Reference style for query parsing (default: `en-cmos_short`) |
+| `-v`, `--versification` | Versification scheme of the query reference |
+| `--no-headings` | Omit heading context from results |
+| `--xml` | Output in XML format |
+
+### `context` Command
+
+| Option | Description |
+|--------|-------------|
+| `--start` | Starting block ID (inclusive) |
+| `--end` | Ending block ID (inclusive) |
+| `--include-headings` | Include preceding headings before the range |
+
+### `info` Command
+
+Takes one or more database paths as arguments.
+No additional options.
+
+## Python API
+
+The `versiref.search` package exports `search_database`, `get_context`, and `get_index_stats` for programmatic use.
+See their docstrings for full parameter documentation.

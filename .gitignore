@@ -11,4 +11,4 @@ wheels/
 
 # For the use of AI agents
 .claude/
-docs/
+reference/

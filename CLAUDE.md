@@ -127,10 +127,17 @@ Key configuration:
 - Module name: `versiref.search`
 - Package includes a `py.typed` marker for type checking support
 
+## Markdown Style
+
+When writing or editing Markdown documents (docs, README, etc.):
+- One sentence per line; do not hard-wrap at a column width.
+- Always specify a language on fenced code blocks (e.g., ```yaml, ```python, ```sh).
+
 ## Important Files
 
-- `docs/design.md`: Comprehensive design document with full schema, workflows, and implementation phases
-- `docs/versiref/`: Documentation for the `versiref` dependency
+- `docs/`: User-facing documentation (tracked in git)
+- `reference/design.md`: Comprehensive design document with full schema, workflows, and implementation phases
+- `reference/versiref/`: Documentation for the `versiref` dependency
 - `pyproject.toml`: Package configuration and dependencies
 - `src/versiref/search/__init__.py`: Main package entry point and public API exports
 - `uv.lock`: Lock file for reproducible dependency resolution
