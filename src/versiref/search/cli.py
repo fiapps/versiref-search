@@ -275,9 +275,14 @@ def _output_search_xml(
 @click.option(
     "-v",
     "--versification",
-    default=None,
-    help="Versification scheme of the query reference (e.g., eng, lxx). "
-    "When set, the reference is mapped to the database's scheme automatically.",
+    default="eng",
+    show_default=True,
+    help="Versification scheme of the query reference (e.g., eng, lxx).",
+)
+@click.option(
+    "--native",
+    is_flag=True,
+    help="Parse the reference query in each database's native versification (overrides -v).",
 )
 @click.option("--xml", is_flag=True, help="Output results in XML-delimited format")
 def search(
@@ -286,7 +291,8 @@ def search(
     string: str | None,
     no_headings: bool,
     style: str,
-    versification: str | None,
+    versification: str,
+    native: bool,
     xml: bool,
 ) -> None:
     """Search one or more databases for Bible references and/or text strings.
@@ -312,7 +318,7 @@ def search(
                 reference_query=reference,
                 string_query=string,
                 include_headings=not no_headings,
-                query_versification=versification,
+                query_versification=None if native else versification,
             )
             total_count += len(results)
             all_db_results.append((database, results))
