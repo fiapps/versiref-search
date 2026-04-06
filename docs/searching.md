@@ -77,16 +77,24 @@ It defaults to `en-cmos_short` (Chicago Manual of Style short abbreviations).
 Other options include `en-sbl` (Society of Biblical Literature).
 The style only affects how the *query* is interpreted; it does not need to match the style used when the database was built.
 
-### Cross-Versification Search
+### Versification
 
-Databases store which versification scheme they use (e.g., `eng`, `lxx`).
-If your query uses a different scheme, use `-v` to specify it:
+Query references are parsed in the `eng` (Protestant English) versification by default and mapped to each database's native scheme automatically.
+This means you can search databases that use different versification schemes without thinking about it.
+
+Use `-v` to parse the query in a different scheme:
 
 ```sh
-versiref-search search lxx-text.db -r "Ps 23" -v eng
+versiref-search search mybook.db -r "Ps 22" -v lxx
 ```
 
-This maps the reference from the `eng` scheme to whatever scheme the database uses before searching.
+Use `--native` to skip mapping and parse the query directly in each database's own versification:
+
+```sh
+versiref-search search mybook.db -r "Ps 23" --native
+```
+
+This is useful when you know the database's scheme and want to query in its terms.
 
 ## String Search
 
@@ -125,7 +133,8 @@ This shows the title, versification scheme, and other metadata, along with block
 | `-r`, `--reference` | Bible reference to search for |
 | `-s`, `--string` | Text string to search for (FTS5 word-boundary, case-insensitive) |
 | `--style` | Reference style for query parsing (default: `en-cmos_short`) |
-| `-v`, `--versification` | Versification scheme of the query reference |
+| `-v`, `--versification` | Versification scheme of the query reference (default: `eng`) |
+| `--native` | Parse query in each database's native versification |
 | `--no-headings` | Omit heading context from results |
 | `--xml` | Output in XML format |
 
