@@ -6,7 +6,7 @@ from versiref import RefStyle
 
 from versiref.search import index_document
 
-SAMPLE_MD = Path(__file__).parent.parent / "docs" / "sample" / "speculum-bvm-ch01.md"
+SAMPLE_MD = Path(__file__).parent / "data" / "speculum-bvm-ch01.md"
 
 MINIMAL_MD_CONTENT = """\
 # Chapter One

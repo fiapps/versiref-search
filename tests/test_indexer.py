@@ -12,7 +12,7 @@ from versiref.search import (
 )
 from versiref.search.database import SCHEMA_VERSION
 
-SAMPLE_MD = Path(__file__).parent.parent / "docs" / "sample" / "speculum-bvm-ch01.md"
+SAMPLE_MD = Path(__file__).parent / "data" / "speculum-bvm-ch01.md"
 
 
 def test_missing_input_raises(tmp_path, ref_style):
