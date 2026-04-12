@@ -35,7 +35,7 @@ def find_unrecognized_abbreviations(
 
     """
     sep = re.escape(ref_style.chapter_verse_separator)
-    pattern = rf"(\d\s+)?(\w[\w()]*)\s+\d+{sep}\d+"
+    pattern = rf"((?:[1-4]|[IV]+)\s+)?(\w[\w()]*)\s+\d+{sep}\d+"
     whitelist_set = set(whitelist) if whitelist else set()
     unrecognized: dict[str, str] = {}
     for match in re.finditer(pattern, text):
