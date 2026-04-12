@@ -156,6 +156,7 @@ def index_document(
             db.set_metadata(key, _normalize_metadata_value(value))
 
         # Index each block
+        reference_count = 0
         for block in blocks:
             # Insert content block
             content_id = db.insert_content(block.text, block.heading_level)
@@ -200,6 +201,15 @@ def index_document(
                         char_start=start_pos,
                         char_end=end_pos,
                     )
+                    reference_count += 1
+
+        if reference_count == 0:
+            logger.warning(
+                "No references were indexed from %s. "
+                "If no unrecognized abbreviation warnings appeared, "
+                "the configured style may not match the document's citation format.",
+                input_path.name,
+            )
 
 
 def get_index_stats(db_path: str | Path) -> dict:

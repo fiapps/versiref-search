@@ -23,6 +23,9 @@ Use a config file for more control:
 versiref-search index ch1.md ch2.md -o mybook.db -c config.yaml
 ```
 
+If indexing completes with zero references found, versiref-search will emit a warning.
+This usually means the selected style does not match the source text.
+
 ## Metadata File
 
 Every database requires metadata.
