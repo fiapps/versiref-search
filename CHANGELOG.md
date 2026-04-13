@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.2.2
+
+### Added
+
+- Reference-search hits are now wrapped in `<mark>` tags in returned block text, using the character spans recorded at indexing time. When a block is matched by both a string and a reference query, string highlighting still wins.
+
+### Changed
+
+- `index` command warns when a source document yields no references.
+- Refined the regex used by `find_unrecognized_abbreviations` to reduce false positives.
+
 ## 0.2.1
 
 ### Added
