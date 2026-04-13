@@ -35,7 +35,7 @@ Results are returned in document order.
 Each result includes:
 
 - **Heading context**: the most recent heading at each level preceding the matched block, giving you the section structure.
-- **Block text**: the Markdown content of the matched block. For string searches, matched words are wrapped in `<mark>` tags.
+- **Block text**: the Markdown content of the matched block. Matches are wrapped in `<mark>` tags — matched words for string searches, and cited references for reference searches. When a block is matched by both a string and a reference query, only the string matches are highlighted (see [Highlighting](#highlighting) below).
 - **Block ID**: a sequential identifier that can be used with the `context` command to retrieve surrounding content.
 
 ### Plain Text Output
@@ -102,7 +102,14 @@ String search uses SQLite FTS5 for word-boundary matching.
 It is case-insensitive but matches whole words, not substrings.
 For example, searching for "grace" will not match "disgrace".
 
-Matched words in results are wrapped in `<mark>` tags so you can identify which words matched.
+## Highlighting
+
+Both kinds of search wrap their matches in `<mark>` tags in the returned block text.
+For string searches, FTS5 highlights the matched words.
+For reference searches, the cited reference text itself is highlighted, using the character positions recorded at indexing time.
+
+When a block is matched by both a string query and a reference query in a combined search, only the string-match highlighting is shown for that block; the reference highlighting is suppressed to avoid interleaving two independent sets of `<mark>` tags in the same text.
+Blocks that were matched by only one of the two query kinds still get that kind's highlighting.
 
 ## Retrieving Context
 

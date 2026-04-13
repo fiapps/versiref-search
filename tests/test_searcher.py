@@ -51,6 +51,13 @@ def test_reference_search_range_overlap(indexed_db, ref_style):
     assert any("Lk 1:28" in r.block_text for r in results)
 
 
+def test_reference_search_highlights_match(indexed_db, ref_style):
+    """Reference-only hits wrap the cited reference in <mark> tags."""
+    results = search_database(indexed_db, ref_style, reference_query="Lk 1:28")
+    assert len(results) == 1
+    assert "<mark>Lk 1:28</mark>" in results[0].block_text
+
+
 # --- String search ---
 
 

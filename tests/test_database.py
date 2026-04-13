@@ -124,7 +124,10 @@ def test_search_exact_verse_match(db):
     db.insert_reference(block_id, 42001028, 42001028, 0, 7)
     results = db.search_by_reference_range(42001028, 42001028)
     assert len(results) == 1
-    assert results[0][0] == block_id
+    content_id, block_text, char_start, char_end = results[0]
+    assert content_id == block_id
+    assert block_text == "Lk 1:28 is cited here."
+    assert (char_start, char_end) == (0, 7)
 
 
 def test_search_query_inside_stored_range(db):
@@ -164,6 +167,17 @@ def test_search_reference_range_multiple_blocks(db):
     db.insert_reference(id2, 42001030, 42001030, 11, 18)
     results = db.search_by_reference_range(42001001, 42001050)
     assert len(results) == 2
+    assert [r[0] for r in results] == [id1, id2]
+
+
+def test_search_reference_range_multiple_matches_in_one_block(db):
+    """A block with multiple matching references yields one row per reference."""
+    block_id = db.insert_content("Lk 1:28 and later Lk 1:30 are both here.")
+    db.insert_reference(block_id, 42001028, 42001028, 0, 7)
+    db.insert_reference(block_id, 42001030, 42001030, 18, 25)
+    results = db.search_by_reference_range(42001001, 42001050)
+    assert len(results) == 2
+    assert [(r[2], r[3]) for r in results] == [(0, 7), (18, 25)]
 
 
 # --- String search ---

@@ -202,29 +202,37 @@ class Database:
 
     def search_by_reference_range(
         self, query_start: int, query_end: int
-    ) -> list[tuple[int, str]]:
-        """Search for content blocks containing references that overlap with query range.
+    ) -> list[tuple[int, str, int, int]]:
+        """Search for reference spans whose stored range overlaps the query range.
+
+        Returns one row per matching reference_index entry, so a content block
+        with multiple matching references appears multiple times — callers that
+        want to highlight every match need all spans.
 
         Args:
             query_start: Start of query range (8-digit integer)
             query_end: End of query range (8-digit integer)
 
         Returns:
-            List of tuples: (content_id, block_text)
+            List of tuples: (content_id, block_text, char_start, char_end),
+            ordered by content_id then char_start.
 
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
 
         cursor = self.conn.execute(
-            """SELECT DISTINCT c.id, c.block_text
+            """SELECT c.id, c.block_text, r.char_start, r.char_end
                FROM content c
                JOIN reference_index r ON r.content_id = c.id
                WHERE r.verse_start <= ? AND r.verse_end >= ?
-               ORDER BY c.id""",
+               ORDER BY c.id, r.char_start""",
             (query_end, query_start),
         )
-        return [(row["id"], row["block_text"]) for row in cursor.fetchall()]
+        return [
+            (row["id"], row["block_text"], row["char_start"], row["char_end"])
+            for row in cursor.fetchall()
+        ]
 
     def search_by_string(self, search_term: str) -> list[tuple[int, str]]:
         """Search for content blocks containing a word/phrase (FTS5 word-boundary matching).

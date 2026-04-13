@@ -7,6 +7,30 @@ from .database import Database
 from .models import SearchResult, BlockInfo
 
 
+def _wrap_reference_spans(text: str, spans: set[tuple[int, int]]) -> str:
+    """Wrap reference character ranges in ``<mark>…</mark>`` tags.
+
+    Overlapping spans (e.g. a broad "Isa 7" containing a narrow "Isa 7:14")
+    are collapsed to their outermost extent to avoid nested tags and to keep
+    right-to-left insertion safe.
+    """
+    if not spans:
+        return text
+
+    ordered = sorted(spans)
+    merged: list[tuple[int, int]] = []
+    for start, end in ordered:
+        if merged and start < merged[-1][1]:
+            prev_start, prev_end = merged[-1]
+            merged[-1] = (min(prev_start, start), max(prev_end, end))
+        else:
+            merged.append((start, end))
+
+    for start, end in reversed(merged):
+        text = text[:start] + "<mark>" + text[start:end] + "</mark>" + text[end:]
+    return text
+
+
 def search_database(
     db_path: str | Path,
     ref_style: RefStyle,
@@ -53,7 +77,9 @@ def search_database(
             raise ValueError("Database missing versification_scheme metadata")
 
         # Collect matched blocks: content_id -> block_text
-        # For string matches, block_text contains <mark> tags from FTS5 highlight()
+        # For string matches, block_text contains <mark> tags from FTS5 highlight().
+        # For reference matches, we accumulate raw spans first and wrap them below.
+        ref_raw: dict[int, tuple[str, set[tuple[int, int]]]] = {}
         ref_blocks: dict[int, str] = {}
         string_blocks: dict[int, str] = {}
 
@@ -91,9 +117,13 @@ def search_database(
 
             for verse_start, verse_end in ref.range_keys():
                 ref_results = db.search_by_reference_range(verse_start, verse_end)
-                for content_id, block_text in ref_results:
-                    if content_id not in ref_blocks:
-                        ref_blocks[content_id] = block_text
+                for content_id, block_text, char_start, char_end in ref_results:
+                    if content_id not in ref_raw:
+                        ref_raw[content_id] = (block_text, set())
+                    ref_raw[content_id][1].add((char_start, char_end))
+
+            for content_id, (block_text, spans) in ref_raw.items():
+                ref_blocks[content_id] = _wrap_reference_spans(block_text, spans)
 
         # Search by string if provided
         if string_query:
