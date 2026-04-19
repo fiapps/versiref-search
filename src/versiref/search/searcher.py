@@ -180,6 +180,45 @@ def search_database(
         return search_results
 
 
+def get_toc(
+    db_path: str | Path,
+    depth: int = 2,
+    start_id: int | None = None,
+    end_id: int | None = None,
+) -> list[BlockInfo]:
+    """Get a table of contents (heading blocks) from a database.
+
+    Args:
+        db_path: Path to SQLite database file
+        depth: Maximum heading level to include (1-6). Defaults to 2.
+        start_id: Optional minimum content block ID (inclusive)
+        end_id: Optional maximum content block ID (inclusive)
+
+    Returns:
+        List of BlockInfo objects for heading blocks in document order
+
+    Raises:
+        FileNotFoundError: If database doesn't exist
+        ValueError: If depth is not between 1 and 6, or if start_id > end_id
+
+    """
+    if depth < 1 or depth > 6:
+        raise ValueError(f"depth must be between 1 and 6 (got {depth})")
+    if start_id is not None and end_id is not None and start_id > end_id:
+        raise ValueError(f"start_id ({start_id}) must not exceed end_id ({end_id})")
+
+    db_path = Path(db_path)
+    if not db_path.exists():
+        raise FileNotFoundError(f"Database not found: {db_path}")
+
+    with Database(db_path) as db:
+        rows = db.get_headings(max_level=depth, block_start=start_id, block_end=end_id)
+        return [
+            BlockInfo(id=block_id, text=text, heading_level=level)
+            for block_id, text, level in rows
+        ]
+
+
 def get_context(
     db_path: str | Path,
     start_id: int,

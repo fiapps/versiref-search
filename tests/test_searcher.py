@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from versiref.search import get_context, search_database
+from versiref.search import get_context, get_toc, search_database
 
 
 # --- Error cases ---
@@ -229,6 +229,49 @@ def test_get_context_empty_range(indexed_db):
 def test_get_context_missing_db(tmp_path):
     with pytest.raises(FileNotFoundError):
         get_context(tmp_path / "nonexistent.db", start_id=1, end_id=5)
+
+
+# --- get_toc ---
+
+
+def test_get_toc_default_depth(indexed_db):
+    """Default depth=2 returns both h1 and h2 headings from minimal_md."""
+    toc = get_toc(indexed_db)
+    assert [(b.id, b.heading_level, b.text) for b in toc] == [
+        (1, 1, "# Chapter One"),
+        (3, 2, "## Section A"),
+    ]
+
+
+def test_get_toc_depth_one(indexed_db):
+    """Depth=1 only includes h1 headings."""
+    toc = get_toc(indexed_db, depth=1)
+    assert [b.id for b in toc] == [1]
+
+
+def test_get_toc_respects_range(indexed_db):
+    """start_id / end_id narrow the toc to the given block range."""
+    toc = get_toc(indexed_db, start_id=2)
+    assert [b.id for b in toc] == [3]
+    toc = get_toc(indexed_db, end_id=2)
+    assert [b.id for b in toc] == [1]
+
+
+def test_get_toc_invalid_depth(indexed_db):
+    with pytest.raises(ValueError, match="depth"):
+        get_toc(indexed_db, depth=0)
+    with pytest.raises(ValueError, match="depth"):
+        get_toc(indexed_db, depth=7)
+
+
+def test_get_toc_start_gt_end(indexed_db):
+    with pytest.raises(ValueError, match="start_id"):
+        get_toc(indexed_db, start_id=5, end_id=2)
+
+
+def test_get_toc_missing_db(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        get_toc(tmp_path / "nonexistent.db")
 
 
 # --- Versification mapping ---

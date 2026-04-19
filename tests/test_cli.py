@@ -125,6 +125,65 @@ def test_search_start_greater_than_end_errors(tmp_path):
     assert "--start" in result.output
 
 
+# --- toc command ---
+
+
+def test_toc_default_depth(tmp_path):
+    # MINIMAL_MD_A: block 1 = "# Document A", block 3 = "## Section A"
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["toc", str(db)])
+    assert result.exit_code == 0
+    assert "# Document A {block=1}" in result.output
+    assert "## Section A {block=3}" in result.output
+
+
+def test_toc_depth_one_excludes_h2(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["toc", str(db), "--depth", "1"])
+    assert result.exit_code == 0
+    assert "# Document A {block=1}" in result.output
+    assert "Section A" not in result.output
+
+
+def test_toc_range_filter(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["toc", str(db), "--start", "2"])
+    assert result.exit_code == 0
+    assert "Document A" not in result.output
+    assert "## Section A {block=3}" in result.output
+
+
+def test_toc_xml(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["toc", str(db), "--xml"])
+    assert result.exit_code == 0
+    assert "<toc>" in result.output
+    assert '<block n="1">' in result.output
+    assert "# Document A" in result.output
+    assert "</block>" in result.output
+    assert "</toc>" in result.output
+
+
+def test_toc_no_headings_in_range(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["toc", str(db), "--start", "100"])
+    assert result.exit_code == 0
+    assert "No headings found." in result.output
+
+
+def test_toc_start_greater_than_end_errors(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["toc", str(db), "--start", "5", "--end", "2"])
+    assert result.exit_code != 0
+    assert "--start" in result.output
+
+
 # --- info command ---
 
 

@@ -334,6 +334,46 @@ class Database:
             for row in cursor.fetchall()
         ]
 
+    def get_headings(
+        self,
+        max_level: int,
+        block_start: int | None = None,
+        block_end: int | None = None,
+    ) -> list[tuple[int, str, int]]:
+        """Get all heading blocks at or above a given level, in document order.
+
+        Args:
+            max_level: Include headings with level <= this value (e.g., 2 returns h1 and h2)
+            block_start: Optional minimum content block ID (inclusive)
+            block_end: Optional maximum content block ID (inclusive)
+
+        Returns:
+            List of tuples: (id, block_text, heading_level), in document order
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+
+        sql = [
+            "SELECT id, block_text, heading_level",
+            "FROM content",
+            "WHERE heading_level IS NOT NULL AND heading_level <= ?",
+        ]
+        params: list[Any] = [max_level]
+        if block_start is not None:
+            sql.append("AND id >= ?")
+            params.append(block_start)
+        if block_end is not None:
+            sql.append("AND id <= ?")
+            params.append(block_end)
+        sql.append("ORDER BY id")
+
+        cursor = self.conn.execute("\n".join(sql), params)
+        return [
+            (row["id"], row["block_text"], row["heading_level"])
+            for row in cursor.fetchall()
+        ]
+
     def get_preceding_heading(
         self, content_id: int, heading_level: int
     ) -> tuple[int, str] | None:

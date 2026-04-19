@@ -8,7 +8,7 @@ from versiref.search.indexer import (
     get_index_stats,
 )
 from versiref.search.models import BlockInfo, SearchResult
-from versiref.search.searcher import get_context, search_database
+from versiref.search.searcher import get_context, get_toc, search_database
 
 __all__ = [
     "BlockInfo",
@@ -18,6 +18,7 @@ __all__ = [
     "find_unrecognized_abbreviations",
     "get_context",
     "get_index_stats",
+    "get_toc",
     "index_document",
     "search_database",
 ]

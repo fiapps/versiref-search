@@ -7,7 +7,7 @@ import yaml
 from versiref import RefStyle, Sensitivity
 
 from .indexer import index_document, get_index_stats
-from .searcher import search_database, get_context
+from .searcher import search_database, get_context, get_toc
 
 
 def _load_metadata(path: Path) -> dict:
@@ -432,6 +432,80 @@ def context(database: Path, start: int, end: int, include_headings: bool) -> Non
                 click.echo(block.text)
 
     except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Unexpected error: {e}", err=True)
+        sys.exit(1)
+
+
+@main.command()
+@click.argument(
+    "database", type=click.Path(exists=True, dir_okay=False, path_type=Path)
+)
+@click.option(
+    "--depth",
+    type=int,
+    default=2,
+    show_default=True,
+    help="Maximum heading level to include (1-6)",
+)
+@click.option(
+    "--start",
+    "start_id",
+    type=int,
+    default=None,
+    help="Only include headings with block ID >= START (inclusive)",
+)
+@click.option(
+    "--end",
+    "end_id",
+    type=int,
+    default=None,
+    help="Only include headings with block ID <= END (inclusive)",
+)
+@click.option("--xml", is_flag=True, help="Output results in XML-delimited format")
+def toc(
+    database: Path,
+    depth: int,
+    start_id: int | None,
+    end_id: int | None,
+    xml: bool,
+) -> None:
+    """Print a table of contents (headings) for DATABASE.
+
+    Outputs every heading whose level is <= --depth (default 2), in document
+    order. Use --start/--end to restrict to a range of block IDs.
+    """
+    if start_id is not None and end_id is not None and start_id > end_id:
+        click.echo("Error: --start must not exceed --end", err=True)
+        sys.exit(1)
+
+    try:
+        headings = get_toc(
+            db_path=database, depth=depth, start_id=start_id, end_id=end_id
+        )
+
+        if xml:
+            click.echo("<toc>")
+            for heading in headings:
+                click.echo(f'<block n="{heading.id}">')
+                click.echo(heading.text)
+                click.echo("</block>")
+            click.echo("</toc>")
+            return
+
+        if not headings:
+            click.echo("No headings found.")
+            return
+
+        for heading in headings:
+            click.echo(f"{heading.text} {{block={heading.id}}}")
+
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    except ValueError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
     except Exception as e:

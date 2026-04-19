@@ -132,6 +132,51 @@ versiref-search context mybook.db --start 40 --end 45
 
 Add `--include-headings` to prepend the heading context for the range.
 
+## Table of Contents
+
+To survey a database's heading structure, use the `toc` command:
+
+```sh
+versiref-search toc mybook.db
+```
+
+By default this prints every heading up to level 2.
+Each line shows the heading in its original Markdown form, followed by its block ID in braces:
+
+```text
+# Book One {block=1}
+## Chapter 1 {block=12}
+## Chapter 2 {block=87}
+```
+
+Use `--depth` to include deeper headings (levels run from 1 to 6), and `--start`/`--end` to restrict to a range of block IDs:
+
+```sh
+versiref-search toc mybook.db --depth 3 --start 100 --end 500
+```
+
+Use `--xml` for machine-readable output using the same `<block n="...">` form as the `search` command:
+
+```xml
+<toc>
+<block n="1">
+# Book One
+</block>
+<block n="12">
+## Chapter 1
+</block>
+</toc>
+```
+
+### `toc` Command
+
+| Option | Description |
+|--------|-------------|
+| `--depth` | Maximum heading level to include (default: 2) |
+| `--start` | Minimum block ID (inclusive) |
+| `--end` | Maximum block ID (inclusive) |
+| `--xml` | Output in XML format |
+
 ## Database Info
 
 To see metadata and statistics for a database:
