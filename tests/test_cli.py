@@ -97,6 +97,34 @@ def test_search_no_query(tmp_path):
     assert result.exit_code != 0
 
 
+def test_search_start_end_limits_range(tmp_path):
+    # MINIMAL_MD_A blocks: 1=h1, 2=Lk 1:28 paragraph, 3=h2, 4=Ps 45:10 paragraph
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+
+    # Restrict to block 4 — Lk 1:28 in block 2 is out of range.
+    result = runner.invoke(main, ["search", str(db), "-r", "Lk 1:28", "--start", "4"])
+    assert result.exit_code == 0
+    assert "No results found" in result.output
+
+    # Open range that includes block 2 finds Lk 1:28.
+    result = runner.invoke(
+        main, ["search", str(db), "-r", "Lk 1:28", "--start", "1", "--end", "3"]
+    )
+    assert result.exit_code == 0
+    assert "Lk 1:28" in result.output
+
+
+def test_search_start_greater_than_end_errors(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["search", str(db), "-s", "paragraph", "--start", "5", "--end", "2"]
+    )
+    assert result.exit_code != 0
+    assert "--start" in result.output
+
+
 # --- info command ---
 
 

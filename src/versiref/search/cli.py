@@ -285,6 +285,20 @@ def _output_search_xml(
     help="Parse the reference query in each database's native versification (overrides -v).",
 )
 @click.option("--xml", is_flag=True, help="Output results in XML-delimited format")
+@click.option(
+    "--start",
+    "start_id",
+    type=int,
+    default=None,
+    help="Only search blocks with ID >= START (inclusive)",
+)
+@click.option(
+    "--end",
+    "end_id",
+    type=int,
+    default=None,
+    help="Only search blocks with ID <= END (inclusive)",
+)
 def search(
     databases: tuple[Path, ...],
     reference: str | None,
@@ -294,6 +308,8 @@ def search(
     versification: str,
     native: bool,
     xml: bool,
+    start_id: int | None,
+    end_id: int | None,
 ) -> None:
     """Search one or more databases for Bible references and/or text strings.
 
@@ -304,6 +320,10 @@ def search(
         click.echo(
             "Error: At least one of --reference or --string must be provided", err=True
         )
+        sys.exit(1)
+
+    if start_id is not None and end_id is not None and start_id > end_id:
+        click.echo("Error: --start must not exceed --end", err=True)
         sys.exit(1)
 
     try:
@@ -319,6 +339,8 @@ def search(
                 string_query=string,
                 include_headings=not no_headings,
                 query_versification=None if native else versification,
+                start_id=start_id,
+                end_id=end_id,
             )
             total_count += len(results)
             all_db_results.append((database, results))

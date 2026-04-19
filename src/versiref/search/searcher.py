@@ -38,6 +38,8 @@ def search_database(
     string_query: str | None = None,
     include_headings: bool = True,
     query_versification: str | None = None,
+    start_id: int | None = None,
+    end_id: int | None = None,
 ) -> list[SearchResult]:
     """Search a database for Bible references and/or text strings.
 
@@ -51,6 +53,10 @@ def search_database(
             provided and different from the database's scheme, the parsed
             reference is mapped to the database's scheme via ``map_to()``.
             When ``None``, the database's own scheme is used to parse the query.
+        start_id: Optional minimum content block ID (inclusive). Limits the
+            range of blocks that will be searched.
+        end_id: Optional maximum content block ID (inclusive). Limits the
+            range of blocks that will be searched.
 
     Returns:
         List of SearchResult objects in document order
@@ -58,13 +64,17 @@ def search_database(
     Raises:
         FileNotFoundError: If database doesn't exist
         ValueError: If neither reference_query nor string_query is provided,
-            or if reference_query is invalid, or if versification mapping fails
+            or if reference_query is invalid, or if versification mapping fails,
+            or if start_id > end_id
 
     """
     if reference_query is None and string_query is None:
         raise ValueError(
             "At least one of reference_query or string_query must be provided"
         )
+
+    if start_id is not None and end_id is not None and start_id > end_id:
+        raise ValueError(f"start_id ({start_id}) must not exceed end_id ({end_id})")
 
     db_path = Path(db_path)
     if not db_path.exists():
@@ -116,7 +126,12 @@ def search_database(
                 ref = mapped
 
             for verse_start, verse_end in ref.range_keys():
-                ref_results = db.search_by_reference_range(verse_start, verse_end)
+                ref_results = db.search_by_reference_range(
+                    verse_start,
+                    verse_end,
+                    block_start=start_id,
+                    block_end=end_id,
+                )
                 for content_id, block_text, char_start, char_end in ref_results:
                     if content_id not in ref_raw:
                         ref_raw[content_id] = (block_text, set())
@@ -127,7 +142,9 @@ def search_database(
 
         # Search by string if provided
         if string_query:
-            string_results = db.search_by_string(string_query)
+            string_results = db.search_by_string(
+                string_query, block_start=start_id, block_end=end_id
+            )
             for content_id, highlighted_text in string_results:
                 if content_id not in string_blocks:
                     string_blocks[content_id] = highlighted_text

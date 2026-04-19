@@ -201,7 +201,11 @@ class Database:
         return cursor.lastrowid
 
     def search_by_reference_range(
-        self, query_start: int, query_end: int
+        self,
+        query_start: int,
+        query_end: int,
+        block_start: int | None = None,
+        block_end: int | None = None,
     ) -> list[tuple[int, str, int, int]]:
         """Search for reference spans whose stored range overlaps the query range.
 
@@ -212,6 +216,8 @@ class Database:
         Args:
             query_start: Start of query range (8-digit integer)
             query_end: End of query range (8-digit integer)
+            block_start: Optional minimum content block ID (inclusive)
+            block_end: Optional maximum content block ID (inclusive)
 
         Returns:
             List of tuples: (content_id, block_text, char_start, char_end),
@@ -221,24 +227,39 @@ class Database:
         if not self.conn:
             raise RuntimeError("Database not connected")
 
-        cursor = self.conn.execute(
-            """SELECT c.id, c.block_text, r.char_start, r.char_end
-               FROM content c
-               JOIN reference_index r ON r.content_id = c.id
-               WHERE r.verse_start <= ? AND r.verse_end >= ?
-               ORDER BY c.id, r.char_start""",
-            (query_end, query_start),
-        )
+        sql = [
+            "SELECT c.id, c.block_text, r.char_start, r.char_end",
+            "FROM content c",
+            "JOIN reference_index r ON r.content_id = c.id",
+            "WHERE r.verse_start <= ? AND r.verse_end >= ?",
+        ]
+        params: list[Any] = [query_end, query_start]
+        if block_start is not None:
+            sql.append("AND c.id >= ?")
+            params.append(block_start)
+        if block_end is not None:
+            sql.append("AND c.id <= ?")
+            params.append(block_end)
+        sql.append("ORDER BY c.id, r.char_start")
+
+        cursor = self.conn.execute("\n".join(sql), params)
         return [
             (row["id"], row["block_text"], row["char_start"], row["char_end"])
             for row in cursor.fetchall()
         ]
 
-    def search_by_string(self, search_term: str) -> list[tuple[int, str]]:
+    def search_by_string(
+        self,
+        search_term: str,
+        block_start: int | None = None,
+        block_end: int | None = None,
+    ) -> list[tuple[int, str]]:
         """Search for content blocks containing a word/phrase (FTS5 word-boundary matching).
 
         Args:
             search_term: Text to search for
+            block_start: Optional minimum content block ID (inclusive)
+            block_end: Optional maximum content block ID (inclusive)
 
         Returns:
             List of tuples: (content_id, highlighted_block_text) where
@@ -248,13 +269,21 @@ class Database:
         if not self.conn:
             raise RuntimeError("Database not connected")
 
-        cursor = self.conn.execute(
-            """SELECT rowid, highlight(content_fts, 0, '<mark>', '</mark>')
-               FROM content_fts
-               WHERE content_fts MATCH ?
-               ORDER BY rowid""",
-            (search_term,),
-        )
+        sql = [
+            "SELECT rowid, highlight(content_fts, 0, '<mark>', '</mark>')",
+            "FROM content_fts",
+            "WHERE content_fts MATCH ?",
+        ]
+        params: list[Any] = [search_term]
+        if block_start is not None:
+            sql.append("AND rowid >= ?")
+            params.append(block_start)
+        if block_end is not None:
+            sql.append("AND rowid <= ?")
+            params.append(block_end)
+        sql.append("ORDER BY rowid")
+
+        cursor = self.conn.execute("\n".join(sql), params)
         return [(row[0], row[1]) for row in cursor.fetchall()]
 
     def get_content_by_id(self, content_id: int) -> tuple[int, str, int | None] | None:

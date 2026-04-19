@@ -102,6 +102,17 @@ String search uses SQLite FTS5 for word-boundary matching.
 It is case-insensitive but matches whole words, not substrings.
 For example, searching for "grace" will not match "disgrace".
 
+## Limiting the Search Range
+
+Use `--start` and `--end` to restrict a search to a range of block IDs.
+Either option may be used on its own; when both are given, `--start` must not exceed `--end`.
+
+```sh
+versiref-search search mybook.db -s "faith" --start 40 --end 120
+```
+
+This is useful for focusing on a particular chapter or section whose block-ID range you already know from a previous search or from the `context` command.
+
 ## Highlighting
 
 Both kinds of search wrap their matches in `<mark>` tags in the returned block text.
@@ -144,6 +155,8 @@ This shows the title, versification scheme, and other metadata, along with block
 | `--native` | Parse query in each database's native versification |
 | `--no-headings` | Omit heading context from results |
 | `--xml` | Output in XML format |
+| `--start` | Minimum block ID to search (inclusive) |
+| `--end` | Maximum block ID to search (inclusive) |
 
 ### `context` Command
 

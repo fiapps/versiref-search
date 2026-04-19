@@ -134,6 +134,67 @@ def test_results_in_document_order(indexed_db, ref_style):
     assert ids == sorted(ids)
 
 
+# --- Block-range limits (start_id / end_id) ---
+
+
+def test_start_id_excludes_earlier_matches(indexed_db, ref_style):
+    """A start_id past the matching block yields no results."""
+    # Lk 1:28 is in block 2
+    results = search_database(
+        indexed_db, ref_style, reference_query="Lk 1:28", start_id=3
+    )
+    assert results == []
+
+
+def test_end_id_excludes_later_matches(indexed_db, ref_style):
+    """An end_id before the matching block yields no results."""
+    # Ps 45:10 is in block 4
+    results = search_database(
+        indexed_db, ref_style, reference_query="Ps 45:10", end_id=3
+    )
+    assert results == []
+
+
+def test_start_and_end_include_match(indexed_db, ref_style):
+    """A range that brackets the matching block returns it."""
+    results = search_database(
+        indexed_db, ref_style, reference_query="Ps 45:10", start_id=3, end_id=5
+    )
+    assert len(results) == 1
+    assert results[0].block_id == 4
+
+
+def test_string_search_limited_by_range(indexed_db, ref_style):
+    """String search honors start_id/end_id — only blocks in range are returned."""
+    # "paragraph" appears in blocks 2, 4, and 5. Restricting to 4-5 yields 2.
+    results = search_database(
+        indexed_db, ref_style, string_query="paragraph", start_id=4, end_id=5
+    )
+    assert len(results) == 2
+    assert [r.block_id for r in results] == [4, 5]
+
+
+def test_start_id_alone(indexed_db, ref_style):
+    """Only start_id given — no upper bound."""
+    results = search_database(
+        indexed_db, ref_style, string_query="paragraph", start_id=4
+    )
+    assert [r.block_id for r in results] == [4, 5]
+
+
+def test_end_id_alone(indexed_db, ref_style):
+    """Only end_id given — no lower bound."""
+    results = search_database(indexed_db, ref_style, string_query="paragraph", end_id=2)
+    assert [r.block_id for r in results] == [2]
+
+
+def test_start_id_greater_than_end_id_raises(indexed_db, ref_style):
+    with pytest.raises(ValueError, match="start_id"):
+        search_database(
+            indexed_db, ref_style, string_query="paragraph", start_id=5, end_id=2
+        )
+
+
 # --- get_context ---
 
 
