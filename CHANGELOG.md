@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.0
+
+### Added
+
+- `toc` subcommand: prints a table of contents of a database's headings. Supports `--depth` (default 2), `--start`/`--end` for block-ID ranges, and `--xml` for machine-readable output.
+- `--start` and `--end` options on the `search` command to restrict a search to a range of block IDs.
+
+### Changed
+
+- Search output annotates heading-context lines with their block IDs, matching the form used by `toc`. In plain text, each heading line ends with `{block=N}`; in XML, each heading is wrapped in `<block n="N">...</block>` just like the matched block.
+
 ## 0.2.2
 
 ### Added
