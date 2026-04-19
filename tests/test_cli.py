@@ -97,6 +97,29 @@ def test_search_no_query(tmp_path):
     assert result.exit_code != 0
 
 
+def test_search_plain_annotates_heading_block_ids(tmp_path):
+    # MINIMAL_MD_A block 3 = "## Section A"; the Ps 45:10 paragraph lives under it.
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["search", str(db), "-r", "Ps 45:10"])
+    assert result.exit_code == 0
+    assert "# Document A {block=1}" in result.output
+    assert "## Section A {block=3}" in result.output
+
+
+def test_search_xml_wraps_headings_with_block_tags(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["search", str(db), "-r", "Ps 45:10", "--xml"])
+    assert result.exit_code == 0
+    # Heading blocks and the matched block share the <block n="..."> form.
+    assert '<block n="1">' in result.output
+    assert "# Document A" in result.output
+    assert '<block n="3">' in result.output
+    assert "## Section A" in result.output
+    assert '<block n="4">' in result.output
+
+
 def test_search_start_end_limits_range(tmp_path):
     # MINIMAL_MD_A blocks: 1=h1, 2=Lk 1:28 paragraph, 3=h2, 4=Ps 45:10 paragraph
     db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")

@@ -47,11 +47,12 @@ class SearchResult:
         """
         lines = []
 
-        # Add heading context if requested
+        # Add heading context if requested — annotate each with its block ID
+        # using the same `{block=N}` form that `toc` produces.
         if show_headings and self.heading_context:
             for level in sorted(self.heading_context.keys()):
                 heading = self.heading_context[level]
-                lines.append(heading.text.strip())
+                lines.append(f"{heading.text.strip()} {{block={heading.id}}}")
 
         # Add separator before content
         if lines:
@@ -75,10 +76,13 @@ class SearchResult:
         """
         lines = ["<result>"]
 
+        # Heading context — wrap each in <block n="..."> to match `toc`.
         if show_headings and self.heading_context:
             for level in sorted(self.heading_context.keys()):
                 heading = self.heading_context[level]
+                lines.append(f'<block n="{heading.id}">')
                 lines.append(heading.text.strip())
+                lines.append("</block>")
 
         lines.append(f'<block n="{self.block_id}">')
         lines.append(self.block_text)

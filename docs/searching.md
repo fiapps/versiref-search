@@ -34,13 +34,23 @@ versiref-search search book1.db book2.db -r "Ps 23"
 Results are returned in document order.
 Each result includes:
 
-- **Heading context**: the most recent heading at each level preceding the matched block, giving you the section structure.
+- **Heading context**: the most recent heading at each level preceding the matched block, giving you the section structure. Each heading is tagged with its own block ID so you can jump to it with `context` or narrow a follow-up search with `--start`/`--end`.
 - **Block text**: the Markdown content of the matched block. Matches are wrapped in `<mark>` tags — matched words for string searches, and cited references for reference searches. When a block is matched by both a string and a reference query, only the string matches are highlighted (see [Highlighting](#highlighting) below).
 - **Block ID**: a sequential identifier that can be used with the `context` command to retrieve surrounding content.
 
 ### Plain Text Output
 
 The default output shows heading context, a block ID, and the block text.
+Each heading line is annotated with its block ID in braces (the same form used by the `toc` command):
+
+```text
+# Chapter Title {block=10}
+## Section Title {block=24}
+
+[Block 42]
+Content of the matched block...
+```
+
 Multiple results are separated by a line of `=` characters.
 
 ### XML Output
@@ -57,8 +67,12 @@ Output structure:
 <search-results count="2">
 <source db="mybook">
 <result>
-## Chapter Title
-### Section Title
+<block n="10">
+# Chapter Title
+</block>
+<block n="24">
+## Section Title
+</block>
 <block n="42">
 Content of the matched block...
 </block>
@@ -66,6 +80,8 @@ Content of the matched block...
 </source>
 </search-results>
 ```
+
+Heading blocks and the matched block use the same `<block n="...">` form — the last `<block>` in each `<result>` is the matched block; any preceding ones are the heading context.
 
 ## Reference Search
 
@@ -171,7 +187,7 @@ Use `--xml` for machine-readable output using the same `<block n="...">` form as
 ### `toc` Command
 
 | Option | Description |
-|--------|-------------|
+| ------ | ----------- |
 | `--depth` | Maximum heading level to include (default: 2) |
 | `--start` | Minimum block ID (inclusive) |
 | `--end` | Maximum block ID (inclusive) |
@@ -192,7 +208,7 @@ This shows the title, versification scheme, and other metadata, along with block
 ### `search` Command
 
 | Option | Description |
-|--------|-------------|
+| ------ | ----------- |
 | `-r`, `--reference` | Bible reference to search for |
 | `-s`, `--string` | Text string to search for (FTS5 word-boundary, case-insensitive) |
 | `--style` | Reference style for query parsing (default: `en-cmos_short`) |
@@ -206,7 +222,7 @@ This shows the title, versification scheme, and other metadata, along with block
 ### `context` Command
 
 | Option | Description |
-|--------|-------------|
+| ------ | ----------- |
 | `--start` | Starting block ID (inclusive) |
 | `--end` | Ending block ID (inclusive) |
 | `--include-headings` | Include preceding headings before the range |
