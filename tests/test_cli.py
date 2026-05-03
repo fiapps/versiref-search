@@ -233,3 +233,65 @@ def test_info_multiple_databases(tmp_path):
     assert "--- doc_b ---" in result.output
     assert "title: Document A" in result.output
     assert "title: Document B" in result.output
+
+
+# --- analyze command ---
+
+
+def test_analyze_lists_every_candidate(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("He cites Lk 1:28 and Mt 5:3.\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", str(md)])
+    assert result.exit_code == 0
+    assert "Analyzed 1 file(s)" in result.output
+    for name in (
+        "org",
+        "eng",
+        "lxx",
+        "vulgata",
+        "nova_vulgata",
+        "nabre",
+        "cei",
+        "rsc",
+        "rso",
+    ):
+        assert name in result.output
+
+
+def test_analyze_multiple_files_combined(tmp_path):
+    a = tmp_path / "a.md"
+    a.write_text("He cites Lk 1:28.\n", encoding="utf-8")
+    b = tmp_path / "b.md"
+    b.write_text("He cites Mt 5:3.\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", str(a), str(b)])
+    assert result.exit_code == 0
+    assert "Analyzed 2 file(s)" in result.output
+    assert "2 reference(s) in pool" in result.output
+
+
+def test_analyze_empty_input_exits_nonzero(tmp_path):
+    md = tmp_path / "empty.md"
+    md.write_text("Nothing here.\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", str(md)])
+    assert result.exit_code != 0
+    assert "No references found" in result.output
+
+
+def test_analyze_psalm_fixture_ranks_lxx_first(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text(
+        "Compare Ps 9:25 with Ps 151:1, alongside Mt 5:3.\n", encoding="utf-8"
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", str(md)])
+    assert result.exit_code == 0
+    # First data row after the header should be lxx.
+    lines = result.output.splitlines()
+    header_index = next(
+        i for i, ln in enumerate(lines) if ln.startswith("Versification")
+    )
+    first_row = lines[header_index + 1]
+    assert first_row.split()[0] == "lxx"

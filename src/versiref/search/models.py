@@ -3,6 +3,29 @@
 from dataclasses import dataclass
 
 
+@dataclass(frozen=True)
+class VersificationScore:
+    """Result of analyzing a text against a single versification.
+
+    Attributes:
+        name: The versification identifier (e.g., "eng", "lxx").
+        valid: Number of references that are valid in this versification.
+        total: Total number of references in the analyzed pool.
+
+    """
+
+    name: str
+    valid: int
+    total: int
+
+    @property
+    def score(self) -> float:
+        """Fraction of references valid in this versification (0.0 if empty)."""
+        if self.total == 0:
+            return 0.0
+        return self.valid / self.total
+
+
 @dataclass
 class BlockInfo:
     """Information about a content block.

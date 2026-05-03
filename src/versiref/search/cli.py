@@ -6,6 +6,7 @@ import click
 import yaml
 from versiref import RefStyle, Sensitivity
 
+from .analyzer import CANDIDATE_VERSIFICATIONS, analyze_documents
 from .indexer import index_document, get_index_stats
 from .searcher import search_database, get_context, get_toc
 
@@ -501,6 +502,90 @@ def toc(
 
         for heading in headings:
             click.echo(f"{heading.text} {{block={heading.id}}}")
+
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Unexpected error: {e}", err=True)
+        sys.exit(1)
+
+
+@main.command()
+@click.argument(
+    "input_files",
+    nargs=-1,
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--style",
+    default="en-cmos_short",
+    show_default=True,
+    help="Named reference style (e.g., en-sbl, en-cmos_short)",
+)
+@click.option(
+    "--sensitivity",
+    default="verse",
+    show_default=True,
+    type=click.Choice([s.name.lower() for s in Sensitivity], case_sensitive=False),
+    help="Reference scanner sensitivity",
+)
+def analyze(
+    input_files: tuple[Path, ...],
+    style: str,
+    sensitivity: str,
+) -> None:
+    """Rank versifications by how many references in INPUT_FILES are valid in each.
+
+    Scans one or more Markdown files for Bible references and checks each
+    reference for validity against every named versification. The output is
+    a ranked table; a higher score suggests the text was authored against
+    that versification scheme.
+    """
+    try:
+        ref_style = RefStyle.named(style)
+        parser_sensitivity = Sensitivity[sensitivity.upper()]
+
+        scores = analyze_documents(
+            input_paths=input_files,
+            ref_style=ref_style,
+            parser_sensitivity=parser_sensitivity,
+        )
+
+        total = scores[0].total if scores else 0
+        if total == 0:
+            click.echo(
+                f"No references found in {len(input_files)} file(s); nothing to score.",
+                err=True,
+            )
+            sys.exit(1)
+
+        click.echo(
+            f"Analyzed {len(input_files)} file(s); {total} reference(s) in pool.\n"
+        )
+
+        name_width = max(len("Versification"), max(len(s.name) for s in scores))
+        valid_width = max(len("Valid"), max(len(str(s.valid)) for s in scores))
+        total_width = max(len("Total"), len(str(total)))
+
+        header = (
+            f"{'Versification':<{name_width}}  "
+            f"{'Valid':>{valid_width}}  "
+            f"{'Total':>{total_width}}  "
+            f"Score"
+        )
+        click.echo(header)
+        for s in scores:
+            click.echo(
+                f"{s.name:<{name_width}}  "
+                f"{s.valid:>{valid_width}}  "
+                f"{s.total:>{total_width}}  "
+                f"{s.score * 100:5.1f}%"
+            )
 
     except FileNotFoundError as e:
         click.echo(f"Error: {e}", err=True)
