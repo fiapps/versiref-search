@@ -26,6 +26,66 @@ versiref-search index ch1.md ch2.md -o mybook.db -c config.yaml
 If indexing completes with zero references found, versiref-search will emit a warning.
 This usually means the selected style does not match the source text.
 
+## Analyzing a Document Before Indexing
+
+Before committing to a `--style` and a `versification`, run `versiref-search analyze` on the source to see which abbreviations the style covers and which named versification best fits the references in the text.
+
+```sh
+versiref-search analyze chapter1.md
+```
+
+The command performs two analyses, in order.
+
+**Abbreviation coverage.**
+It scans the text with a regex built from the style's chapter/verse separator, then drops anything the style's `recognized_names` already covers.
+For whatever is left, it greedy-picks the smallest list of bundled standard-name sets (e.g., `en-sbl_abbreviations`, `en-douay-rheims_names`) that cover the unrecognized names, and reports any leftovers that no bundled set covers.
+Candidate sets are scoped to the language prefix of the configured style (e.g., `en-*`); a style whose identifier has no `xx-` or `xxx-` prefix falls back to all bundled sets.
+Before the second step, the recommended sets are merged into the style via `also_recognize` so the parser can pick up the previously-unrecognized references.
+
+**Versification ranking.**
+With the enriched style in hand, it scans the references and ranks every named versification by the percentage of references that are valid in it (book in the canon, chapter and verse in range).
+A higher score suggests the text was authored against that scheme.
+Differences typically show up in Psalm numbering and in the inclusion of deuterocanonical books.
+
+Example output:
+
+```text
+Analyzed 1 file(s).
+
+Additional book-name sets needed (en-*):
+  en-douay-rheims_names
+  en-sbl_abbreviations
+
+Names not covered by any set: PL
+
+Reference pool: 137 reference(s).
+
+Versification     Valid  Total  Score
+lxx                 132    137  96.4%
+vulgata             129    137  94.2%
+...
+```
+
+To act on the report:
+
+- Add the recommended sets to your inline `style:` config block via `also_recognize`, or pick a `--style` whose recognized names already include them.
+- Set the top-ranked versification as the `versification` value in your metadata or config.
+- Add genuinely-non-Bible abbreviations (e.g., `PL` for *Patrologia Latina*) to `abbreviations_whitelist` so the indexer's abbreviation check stops flagging them.
+
+If the configured style already recognizes everything, the command prints `All abbreviations are recognized by the configured style.` and proceeds straight to the versification ranking.
+If the reference pool is empty (no recognized references at all), the versification ranking is skipped and the command exits with a non-zero status.
+
+### CLI options
+
+```text
+versiref-search analyze [OPTIONS] INPUT_FILES...
+```
+
+| Option | Description |
+|--------|-------------|
+| `--style` | Named reference style (default: `en-cmos_short`) |
+| `--sensitivity` | Reference scanner sensitivity: `verse`, `chapter`, or `book` (default: `verse`) |
+
 ## Metadata File
 
 Every database requires metadata.
@@ -191,5 +251,10 @@ CLI options take precedence over config file values where both apply.
 
 ## Python API
 
-The `versiref.search` package exports `index_document` and `get_index_stats` for programmatic use.
+The `versiref.search` package exports the following functions and types for programmatic use:
+
+- `index_document` and `get_index_stats` — build and inspect databases.
+- `analyze_documents` — rank named versifications against a set of source files; returns `list[VersificationScore]`.
+- `analyze_abbreviations` — find unrecognized book abbreviations and recommend bundled standard-name sets to cover them; returns an `AbbreviationAnalysis`.
+
 See their docstrings for full parameter documentation.
