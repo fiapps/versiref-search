@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.4.0
+
+### Added
+
+- `analyze` subcommand: a preflight tool that scans one or more Markdown files, recommends bundled book-name sets to cover any abbreviations the configured `--style` does not already recognize, and ranks named versifications by how well they fit the references in the text. Documented in `docs/indexing.md`.
+- Public Python API: `analyze_documents`, `analyze_abbreviations`, `VersificationScore`, `AbbreviationAnalysis`.
+
 ## 0.3.0
 
 ### Added
