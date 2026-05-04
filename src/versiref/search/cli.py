@@ -1,13 +1,15 @@
 """Command-line interface for versiref-search."""
 
+import re
 import sys
 from pathlib import Path
 import click
 import yaml
 from versiref import RefStyle, Sensitivity
 
-from .analyzer import analyze_documents
+from .analyzer import analyze_abbreviations, analyze_documents
 from .indexer import index_document, get_index_stats
+from .models import AbbreviationAnalysis
 from .searcher import search_database, get_context, get_toc
 
 
@@ -539,16 +541,24 @@ def analyze(
     style: str,
     sensitivity: str,
 ) -> None:
-    """Rank versifications by how many references in INPUT_FILES are valid in each.
+    """Analyze INPUT_FILES for abbreviations and versification scheme.
 
-    Scans one or more Markdown files for Bible references and checks each
-    reference for validity against every named versification. The output is
-    a ranked table; a higher score suggests the text was authored against
-    that versification scheme.
+    First reports book abbreviations the configured ``--style`` does not
+    recognize and, where possible, recommends bundled standard-name sets
+    that would cover them. Then ranks every named versification by the
+    fraction of parsed references that are valid in it.
     """
     try:
         ref_style = RefStyle.named(style)
         parser_sensitivity = Sensitivity[sensitivity.upper()]
+
+        click.echo(f"Analyzed {len(input_files)} file(s).\n")
+
+        abbrev = analyze_abbreviations(input_paths=input_files, ref_style=ref_style)
+        _emit_abbreviation_section(abbrev, ref_style)
+
+        for set_name in abbrev.needed_sets:
+            ref_style.also_recognize(set_name)
 
         scores = analyze_documents(
             input_paths=input_files,
@@ -557,16 +567,16 @@ def analyze(
         )
 
         total = scores[0].total if scores else 0
+        click.echo()
         if total == 0:
             click.echo(
-                f"No references found in {len(input_files)} file(s); nothing to score.",
-                err=True,
+                "Reference pool: 0 reference(s); skipping versification ranking."
             )
-            sys.exit(1)
+            if not abbrev.unrecognized:
+                sys.exit(1)
+            return
 
-        click.echo(
-            f"Analyzed {len(input_files)} file(s); {total} reference(s) in pool.\n"
-        )
+        click.echo(f"Reference pool: {total} reference(s).\n")
 
         name_width = max(len("Versification"), max(len(s.name) for s in scores))
         valid_width = max(len("Valid"), max(len(str(s.valid)) for s in scores))
@@ -596,6 +606,29 @@ def analyze(
     except Exception as e:
         click.echo(f"Unexpected error: {e}", err=True)
         sys.exit(1)
+
+
+def _emit_abbreviation_section(
+    abbrev: AbbreviationAnalysis, ref_style: RefStyle
+) -> None:
+    """Print the abbreviation analysis section to stdout."""
+    if not abbrev.unrecognized:
+        click.echo("All abbreviations are recognized by the configured style.")
+        return
+
+    identifier = ref_style.identifier or ""
+    match = re.match(r"^([a-z]{2,3})-", identifier)
+    glob = f"{match.group(1)}-*" if match else "*"
+
+    if abbrev.needed_sets:
+        click.echo(f"Additional book-name sets needed ({glob}):")
+        for name in abbrev.needed_sets:
+            click.echo(f"  {name}")
+    if abbrev.remaining:
+        click.echo()
+        click.echo(
+            "Names not covered by any set: " + ", ".join(sorted(abbrev.remaining))
+        )
 
 
 if __name__ == "__main__":

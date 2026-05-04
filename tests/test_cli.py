@@ -258,7 +258,7 @@ def test_analyze_multiple_files_combined(tmp_path):
     result = runner.invoke(main, ["analyze", str(a), str(b)])
     assert result.exit_code == 0
     assert "Analyzed 2 file(s)" in result.output
-    assert "2 reference(s) in pool" in result.output
+    assert "Reference pool: 2 reference(s)" in result.output
 
 
 def test_analyze_empty_input_exits_nonzero(tmp_path):
@@ -267,7 +267,48 @@ def test_analyze_empty_input_exits_nonzero(tmp_path):
     runner = CliRunner()
     result = runner.invoke(main, ["analyze", str(md)])
     assert result.exit_code != 0
-    assert "No references found" in result.output
+    assert "Reference pool: 0 reference(s)" in result.output
+
+
+def test_analyze_reports_all_abbreviations_recognized(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("He cites Lk 1:28 and Mt 5:3.\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", str(md)])
+    assert result.exit_code == 0
+    assert "All abbreviations are recognized" in result.output
+
+
+def test_analyze_recommends_set_for_unrecognized_abbreviation(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("He cites 1 Sam 3:4.\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", str(md)])
+    assert result.exit_code == 0
+    assert "Additional book-name sets needed (en-*)" in result.output
+    assert "en-sbl_abbreviations" in result.output
+
+
+def test_analyze_lists_uncovered_abbreviation(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("He cites Foobar 1:1.\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", str(md)])
+    assert "Names not covered by any set:" in result.output
+    assert "Foobar" in result.output
+
+
+def test_analyze_pool_includes_refs_after_set_enrichment(tmp_path):
+    # "1 Sam 3:4" is unrecognized by en-cmos_short alone, so without the
+    # also_recognize step the parser would skip it and the reference pool
+    # would be empty. After enrichment with en-sbl_abbreviations, the ref
+    # is parsed and ends up in the pool.
+    md = tmp_path / "doc.md"
+    md.write_text("He cites 1 Sam 3:4.\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", str(md)])
+    assert result.exit_code == 0
+    assert "Reference pool: 1 reference(s)" in result.output
 
 
 def test_analyze_psalm_fixture_ranks_lxx_first(tmp_path):

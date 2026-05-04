@@ -2,9 +2,13 @@
 
 from pathlib import Path
 
-from versiref import Versification
+from versiref import RefStyle, Versification
 
-from versiref.search import VersificationScore, analyze_documents
+from versiref.search import (
+    VersificationScore,
+    analyze_abbreviations,
+    analyze_documents,
+)
 
 
 def _write(tmp_path: Path, name: str, text: str) -> Path:
@@ -102,3 +106,76 @@ def test_dedupe_across_versifications(tmp_path, ref_style):
     md = _write(tmp_path, "doc.md", "He cites Lk 1:28.\n")
     scores = analyze_documents([md], ref_style)
     assert all(s.total == 1 for s in scores)
+
+
+# --- analyze_abbreviations ---
+
+
+def test_abbreviations_all_recognized(tmp_path, ref_style):
+    md = _write(tmp_path, "doc.md", "He cites Lk 1:28 and Mt 5:3.\n")
+    result = analyze_abbreviations([md], ref_style)
+    assert result.unrecognized == {}
+    assert result.needed_sets == []
+    assert result.remaining == {}
+
+
+def test_abbreviations_truly_unrecognized_lands_in_remaining(tmp_path, ref_style):
+    md = _write(tmp_path, "doc.md", "He cites Foobar 1:1.\n")
+    result = analyze_abbreviations([md], ref_style)
+    assert "Foobar" in result.unrecognized
+    assert "Foobar" in result.remaining
+    assert result.needed_sets == []
+
+
+def test_abbreviations_unique_set_is_recommended(tmp_path, ref_style):
+    # "1 Sam" is in en-sbl_abbreviations but not in en-cmos_short.recognized_names.
+    md = _write(tmp_path, "doc.md", "He cites 1 Sam 3:4.\n")
+    result = analyze_abbreviations([md], ref_style)
+    assert "1 Sam" in result.unrecognized
+    assert result.needed_sets == ["en-sbl_abbreviations"]
+    assert result.remaining == {}
+
+
+def test_abbreviations_greedy_picks_higher_coverage_first(tmp_path, ref_style):
+    # Both abbrevs ("1 Sam" and "1 Pet") live only in en-sbl_abbreviations
+    # among en-* sets — so a single set covers both. Verify the greedy step
+    # picks one set rather than two.
+    md = _write(tmp_path, "doc.md", "He cites 1 Sam 3:4 and 1 Pet 5:8.\n")
+    result = analyze_abbreviations([md], ref_style)
+    assert {"1 Sam", "1 Pet"} <= set(result.unrecognized)
+    assert result.needed_sets == ["en-sbl_abbreviations"]
+
+
+def test_abbreviations_language_prefix_scopes_candidates(tmp_path, ref_style):
+    # "1 Samuele" is an Italian name, present in it-cei_nomi but not in any
+    # en-* set. Style identifier "en-cmos_short" yields glob "en-*", so the
+    # Italian name should fall through to `remaining`.
+    md = _write(tmp_path, "doc.md", "He cites 1 Samuele 3:4.\n")
+    result = analyze_abbreviations([md], ref_style)
+    assert "1 Samuele" in result.unrecognized
+    assert "1 Samuele" in result.remaining
+    assert result.needed_sets == []
+
+
+def test_abbreviations_no_language_prefix_uses_all_sets(tmp_path):
+    # A style built from a dict has identifier=None, so the prefix regex
+    # doesn't match and the analyzer falls back to glob "*". An it-*
+    # abbrev *can* then be covered.
+    style = RefStyle.from_dict({"base": "en-cmos_short"})
+    assert style.identifier is None
+    md = _write(tmp_path, "doc.md", "Cita 1 Samuele 3:4.\n")
+    result = analyze_abbreviations([md], style)
+    assert "1 Samuele" in result.unrecognized
+    assert result.needed_sets == ["it-cei_nomi"]
+
+
+def test_abbreviations_pool_across_files(tmp_path, ref_style):
+    a = _write(tmp_path, "a.md", "He cites 1 Sam 3:4.\n")
+    b = _write(tmp_path, "b.md", "He cites 1 Machabees 1:10.\n")
+    result = analyze_abbreviations([a, b], ref_style)
+    assert {"1 Sam", "1 Machabees"} <= set(result.unrecognized)
+    assert set(result.needed_sets) == {
+        "en-sbl_abbreviations",
+        "en-douay-rheims_names",
+    }
+    assert result.remaining == {}

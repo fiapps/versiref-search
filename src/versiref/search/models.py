@@ -4,6 +4,26 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class AbbreviationAnalysis:
+    """Analysis of book abbreviations found in input text.
+
+    Attributes:
+        unrecognized: Abbreviations found in the text that the configured
+            style does not recognize, mapped to an example of usage.
+        needed_sets: Standard book-name set identifiers that, applied in
+            order, give the largest additional coverage of `unrecognized`
+            at each step (greedy minimum cover).
+        remaining: Subset of `unrecognized` not covered by any candidate
+            set, mapped to an example of usage.
+
+    """
+
+    unrecognized: dict[str, str]
+    needed_sets: list[str]
+    remaining: dict[str, str]
+
+
+@dataclass(frozen=True)
 class VersificationScore:
     """Result of analyzing a text against a single versification.
 
