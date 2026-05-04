@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from click.testing import CliRunner
-from versiref import RefStyle
+from versiref import RefStyle, Versification
 
 from versiref.search import index_document
 from versiref.search.cli import main
@@ -245,17 +245,7 @@ def test_analyze_lists_every_candidate(tmp_path):
     result = runner.invoke(main, ["analyze", str(md)])
     assert result.exit_code == 0
     assert "Analyzed 1 file(s)" in result.output
-    for name in (
-        "org",
-        "eng",
-        "lxx",
-        "vulgata",
-        "nova_vulgata",
-        "nabre",
-        "cei",
-        "rsc",
-        "rso",
-    ):
+    for name in Versification.available_names():
         assert name in result.output
 
 

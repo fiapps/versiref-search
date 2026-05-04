@@ -1,6 +1,6 @@
 """Search texts for Bible references with versiref."""
 
-from versiref.search.analyzer import CANDIDATE_VERSIFICATIONS, analyze_documents
+from versiref.search.analyzer import analyze_documents
 from versiref.search.database import Database
 from versiref.search.indexer import (
     InvalidRefAction,
@@ -13,7 +13,6 @@ from versiref.search.searcher import get_context, get_toc, search_database
 
 __all__ = [
     "BlockInfo",
-    "CANDIDATE_VERSIFICATIONS",
     "Database",
     "InvalidRefAction",
     "SearchResult",

@@ -9,25 +9,12 @@ from .markdown_parser import parse_markdown
 from .models import VersificationScore
 
 
-CANDIDATE_VERSIFICATIONS: tuple[str, ...] = (
-    "org",
-    "eng",
-    "lxx",
-    "vulgata",
-    "nova_vulgata",
-    "nabre",
-    "cei",
-    "rsc",
-    "rso",
-)
-
-
 def analyze_documents(
     input_paths: Sequence[str | Path],
     ref_style: RefStyle,
     *,
     parser_sensitivity: Sensitivity = Sensitivity.VERSE,
-    candidates: Sequence[str] = CANDIDATE_VERSIFICATIONS,
+    candidates: Sequence[str] | None = None,
 ) -> list[VersificationScore]:
     """Score each candidate versification by validity of references in the input.
 
@@ -40,13 +27,16 @@ def analyze_documents(
         input_paths: One or more Markdown files to analyze.
         ref_style: RefStyle controlling how book names are recognized.
         parser_sensitivity: Sensitivity level for reference scanning.
-        candidates: Versification identifiers to evaluate.
+        candidates: Versification identifiers to evaluate. Defaults to every
+            scheme returned by ``Versification.available_names()``.
 
     Returns:
         A list of VersificationScore objects sorted by score (descending),
         with ties broken by absolute valid count, then by candidate order.
 
     """
+    if candidates is None:
+        candidates = Versification.available_names()
     versifications = {name: Versification.named(name) for name in candidates}
 
     pool: dict[tuple[Path, int, int, int], BibleRef] = {}

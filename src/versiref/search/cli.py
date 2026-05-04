@@ -6,7 +6,7 @@ import click
 import yaml
 from versiref import RefStyle, Sensitivity
 
-from .analyzer import CANDIDATE_VERSIFICATIONS, analyze_documents
+from .analyzer import analyze_documents
 from .indexer import index_document, get_index_stats
 from .searcher import search_database, get_context, get_toc
 

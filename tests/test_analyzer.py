@@ -2,14 +2,9 @@
 
 from pathlib import Path
 
-import pytest
-from versiref import RefStyle
+from versiref import Versification
 
-from versiref.search import (
-    CANDIDATE_VERSIFICATIONS,
-    VersificationScore,
-    analyze_documents,
-)
+from versiref.search import VersificationScore, analyze_documents
 
 
 def _write(tmp_path: Path, name: str, text: str) -> Path:
@@ -25,8 +20,9 @@ def _by_name(scores: list[VersificationScore]) -> dict[str, VersificationScore]:
 def test_returns_one_score_per_candidate(tmp_path, ref_style):
     md = _write(tmp_path, "doc.md", "He cites Lk 1:28 and Mt 5:3.\n")
     scores = analyze_documents([md], ref_style)
-    assert len(scores) == len(CANDIDATE_VERSIFICATIONS)
-    assert {s.name for s in scores} == set(CANDIDATE_VERSIFICATIONS)
+    expected = set(Versification.available_names())
+    assert {s.name for s in scores} == expected
+    assert len(scores) == len(expected)
 
 
 def test_total_is_consistent_across_candidates(tmp_path, ref_style):
