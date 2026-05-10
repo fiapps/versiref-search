@@ -14,7 +14,6 @@ from versiref import (
     standard_names,
 )
 
-from .markdown_parser import parse_markdown
 from .models import AbbreviationAnalysis, VersificationScore
 
 
@@ -121,10 +120,10 @@ def analyze_documents(
 ) -> list[VersificationScore]:
     """Score each candidate versification by validity of references in the input.
 
-    Each input file is parsed into Markdown blocks. For every candidate
-    versification, the blocks are scanned for Bible references; the union of
-    hits (deduped by character span) becomes the reference pool. Each candidate
-    is then scored by the fraction of pool entries that are valid in it.
+    For every candidate versification, each input file is scanned for Bible
+    references; the union of hits (deduped by file and character span)
+    becomes the reference pool. Each candidate is then scored by the
+    fraction of pool entries that are valid in it.
 
     Args:
         input_paths: One or more Markdown files to analyze.
@@ -142,19 +141,19 @@ def analyze_documents(
         candidates = Versification.available_names()
     versifications = {name: Versification.named(name) for name in candidates}
 
-    pool: dict[tuple[Path, int, int, int], BibleRef] = {}
+    # Each versification gets its own parser, so a reference at the same
+    # span gets visited once per scheme. The dedupe key folds those
+    # repeated hits into one pool entry.
+    pool: dict[tuple[Path, int, int], BibleRef] = {}
     for raw_path in input_paths:
         path = Path(raw_path)
-        markdown_text = path.read_text(encoding="utf-8")
-        blocks = parse_markdown(markdown_text)
-        for name, vers in versifications.items():
+        text = path.read_text(encoding="utf-8")
+        for vers in versifications.values():
             parser = RefParser(ref_style, vers)
-            for block in blocks:
-                for ref, start_pos, end_pos in parser.scan_string(
-                    block.text, sensitivity=parser_sensitivity
-                ):
-                    key = (path, block.id, start_pos, end_pos)
-                    pool.setdefault(key, ref)
+            for ref, start_pos, end_pos in parser.scan_string(
+                text, sensitivity=parser_sensitivity
+            ):
+                pool.setdefault((path, start_pos, end_pos), ref)
 
     scores: list[VersificationScore] = []
     for name in candidates:
