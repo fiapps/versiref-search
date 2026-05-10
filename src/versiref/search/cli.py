@@ -9,7 +9,7 @@ from versiref import RefStyle, Sensitivity
 
 from .analyzer import analyze_abbreviations, analyze_documents
 from .indexer import index_document, get_index_stats
-from .models import AbbreviationAnalysis
+from .models import AbbreviationAnalysis, VersificationScore
 from .searcher import search_database, get_context, get_toc
 
 
@@ -524,22 +524,29 @@ def toc(
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option(
+    "-c",
+    "--config",
+    "config_file",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="YAML config file (same format as the index command)",
+)
+@click.option(
     "--style",
-    default="en-cmos_short",
-    show_default=True,
-    help="Named reference style (e.g., en-sbl, en-cmos_short)",
+    default=None,
+    help="Named reference style (overrides config) [default: en-cmos_short]",
 )
 @click.option(
     "--sensitivity",
-    default="verse",
-    show_default=True,
+    default=None,
     type=click.Choice([s.name.lower() for s in Sensitivity], case_sensitive=False),
-    help="Reference scanner sensitivity",
+    help="Reference scanner sensitivity (overrides config) [default: verse]",
 )
 def analyze(
     input_files: tuple[Path, ...],
-    style: str,
-    sensitivity: str,
+    config_file: Path | None,
+    style: str | None,
+    sensitivity: str | None,
 ) -> None:
     """Analyze INPUT_FILES for abbreviations and versification scheme.
 
@@ -547,14 +554,54 @@ def analyze(
     recognize and, where possible, recommends bundled standard-name sets
     that would cover them. Then ranks every named versification by the
     fraction of parsed references that are valid in it.
+
+    When a config file is supplied, the ``style``, ``parser_sensitivity``,
+    and ``abbreviations_whitelist`` keys take effect, and the
+    ``versification`` key (either set directly or pulled from the linked
+    metadata file) is flagged with ``*`` in the ranking.
     """
     try:
-        ref_style = RefStyle.named(style)
-        parser_sensitivity = Sensitivity[sensitivity.upper()]
+        config: dict = {}
+        if config_file is not None:
+            config = _load_config(config_file)
+
+        # Resolve style: CLI --style overrides config.
+        if style is not None:
+            ref_style = RefStyle.named(style)
+        else:
+            style_value = config.get("style")
+            if style_value is None:
+                ref_style = RefStyle.named("en-cmos_short")
+            elif isinstance(style_value, dict):
+                ref_style = RefStyle.from_dict(style_value)
+            else:
+                ref_style = RefStyle.named(style_value)
+
+        # Resolve sensitivity: CLI --sensitivity overrides config.
+        sensitivity_value = sensitivity or config.get("parser_sensitivity") or "verse"
+        try:
+            parser_sensitivity = Sensitivity[sensitivity_value.upper()]
+        except KeyError:
+            valid = ", ".join(s.name.lower() for s in Sensitivity)
+            raise ValueError(
+                f"Invalid parser_sensitivity '{sensitivity_value}'. "
+                f"Valid values: {valid}"
+            )
+
+        # Whitelist comes from the config only.
+        whitelist = config.get("abbreviations_whitelist")
+
+        # Configured versification for highlighting in the ranking. Pull
+        # from the config or, failing that, the metadata file it points to.
+        configured_vers = _resolve_configured_versification(config)
 
         click.echo(f"Analyzed {len(input_files)} file(s).\n")
 
-        abbrev = analyze_abbreviations(input_paths=input_files, ref_style=ref_style)
+        abbrev = analyze_abbreviations(
+            input_paths=input_files,
+            ref_style=ref_style,
+            abbreviation_whitelist=whitelist,
+        )
         _emit_abbreviation_section(abbrev, ref_style)
 
         for set_name in abbrev.needed_sets:
@@ -578,25 +625,10 @@ def analyze(
 
         click.echo(f"Reference pool: {total} reference(s).\n")
 
-        name_width = max(len("Versification"), max(len(s.name) for s in scores))
-        valid_width = max(len("Valid"), max(len(str(s.valid)) for s in scores))
-        total_width = max(len("Total"), len(str(total)))
+        _emit_ranking(scores, configured_vers)
 
-        header = (
-            f"{'Versification':<{name_width}}  "
-            f"{'Valid':>{valid_width}}  "
-            f"{'Total':>{total_width}}  "
-            f"Score"
-        )
-        click.echo(header)
-        for s in scores:
-            click.echo(
-                f"{s.name:<{name_width}}  "
-                f"{s.valid:>{valid_width}}  "
-                f"{s.total:>{total_width}}  "
-                f"{s.score * 100:5.1f}%"
-            )
-
+    except click.UsageError:
+        raise
     except FileNotFoundError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -606,6 +638,68 @@ def analyze(
     except Exception as e:
         click.echo(f"Unexpected error: {e}", err=True)
         sys.exit(1)
+
+
+def _resolve_configured_versification(config: dict) -> str | None:
+    """Find the configured versification, if any, for the analyze ranking marker.
+
+    Prefers ``config["versification"]``; falls back to the ``versification``
+    key in the metadata file the config points to. Errors loading metadata
+    are swallowed — the marker is a UX nicety, not a correctness gate.
+    """
+    if "versification" in config:
+        value = config["versification"]
+        return str(value) if value is not None else None
+    meta_path = config.get("metadata")
+    if meta_path is None:
+        return None
+    try:
+        metadata = _load_metadata(Path(meta_path))
+    except (OSError, ValueError, yaml.YAMLError):
+        return None
+    value = metadata.get("versification")
+    return str(value) if value is not None else None
+
+
+def _emit_ranking(
+    scores: list[VersificationScore], configured_vers: str | None
+) -> None:
+    """Print the versification ranking table, marking the configured one."""
+    # Versification names are case-insensitive (e.g., "Vulgata" matches
+    # "vulgata"); resolve to the canonical name used in the score table.
+    by_lower = {s.name.lower(): s.name for s in scores}
+    marked = (
+        by_lower.get(configured_vers.lower()) if configured_vers is not None else None
+    )
+
+    name_width = max(len("Versification"), max(len(s.name) for s in scores))
+    valid_width = max(len("Valid"), max(len(str(s.valid)) for s in scores))
+    total_width = max(len("Total"), max(len(str(s.total)) for s in scores))
+
+    header = (
+        f"  {'Versification':<{name_width}}  "
+        f"{'Valid':>{valid_width}}  "
+        f"{'Total':>{total_width}}  "
+        f"Score"
+    )
+    click.echo(header)
+    for s in scores:
+        marker = "*" if s.name == marked else " "
+        click.echo(
+            f"{marker} {s.name:<{name_width}}  "
+            f"{s.valid:>{valid_width}}  "
+            f"{s.total:>{total_width}}  "
+            f"{s.score * 100:5.1f}%"
+        )
+
+    if marked is not None:
+        click.echo()
+        click.echo(f"* configured versification ({marked})")
+    elif configured_vers is not None:
+        click.echo()
+        click.echo(
+            f"Note: configured versification '{configured_vers}' is not a known scheme."
+        )
 
 
 def _emit_abbreviation_section(

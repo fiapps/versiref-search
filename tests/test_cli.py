@@ -321,8 +321,108 @@ def test_analyze_psalm_fixture_ranks_lxx_first(tmp_path):
     assert result.exit_code == 0
     # First data row after the header should be lxx.
     lines = result.output.splitlines()
-    header_index = next(
-        i for i, ln in enumerate(lines) if ln.startswith("Versification")
-    )
+    header_index = next(i for i, ln in enumerate(lines) if "Versification" in ln)
     first_row = lines[header_index + 1]
-    assert first_row.split()[0] == "lxx"
+    # Strip the leading marker column (single char + space) before parsing
+    # the row, since unmarked rows lead with two spaces.
+    assert first_row[2:].split()[0] == "lxx"
+
+
+def test_analyze_config_whitelist_suppresses_abbreviation(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("He cites Foobar 1:1 and Lk 1:28.\n", encoding="utf-8")
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "abbreviations_whitelist:\n  - Foobar\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", "-c", str(config), str(md)])
+    assert result.exit_code == 0
+    assert "Foobar" not in result.output
+    assert "All abbreviations are recognized" in result.output
+
+
+def test_analyze_config_marks_configured_versification(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("He cites Lk 1:28 and Mt 5:3.\n", encoding="utf-8")
+    config = tmp_path / "config.yaml"
+    config.write_text("versification: lxx\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", "-c", str(config), str(md)])
+    assert result.exit_code == 0
+    # The lxx row carries the leading asterisk.
+    lxx_rows = [ln for ln in result.output.splitlines() if " lxx " in ln + " "]
+    assert any(ln.startswith("* lxx") for ln in lxx_rows)
+    assert "configured versification (lxx)" in result.output
+
+
+def test_analyze_config_versification_match_is_case_insensitive(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("He cites Lk 1:28 and Mt 5:3.\n", encoding="utf-8")
+    config = tmp_path / "config.yaml"
+    config.write_text("versification: Vulgata\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", "-c", str(config), str(md)])
+    assert result.exit_code == 0
+    # Marker lands on the canonical "vulgata" row, and the legend uses the
+    # canonical name too.
+    assert any(ln.startswith("* vulgata") for ln in result.output.splitlines())
+    assert "configured versification (vulgata)" in result.output
+
+
+def test_analyze_config_pulls_versification_from_metadata(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("He cites Lk 1:28.\n", encoding="utf-8")
+    metadata = tmp_path / "metadata.yaml"
+    metadata.write_text("title: Sample\nversification: eng\n", encoding="utf-8")
+    config = tmp_path / "config.yaml"
+    config.write_text("metadata: metadata.yaml\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", "-c", str(config), str(md)])
+    assert result.exit_code == 0
+    assert "configured versification (eng)" in result.output
+
+
+def test_analyze_config_unknown_versification_warns(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("He cites Lk 1:28.\n", encoding="utf-8")
+    config = tmp_path / "config.yaml"
+    config.write_text("versification: nonesuch\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", "-c", str(config), str(md)])
+    assert result.exit_code == 0
+    assert "'nonesuch' is not a known scheme" in result.output
+
+
+def test_analyze_config_inline_style_recognizes_custom_abbreviation(tmp_path):
+    # "ZZ" is not a normal Bible abbreviation; an inline style mapping it to
+    # MAT (Matthew) lets the parser pick up "ZZ 1:1" without warning.
+    md = tmp_path / "doc.md"
+    md.write_text("He cites ZZ 1:1.\n", encoding="utf-8")
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "style:\n  base: en-cmos_short\n  also_recognize:\n    - ZZ: MAT\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["analyze", "-c", str(config), str(md)])
+    assert result.exit_code == 0
+    assert "All abbreviations are recognized" in result.output
+
+
+def test_analyze_cli_style_overrides_config(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("He cites 1 Sam 3:4.\n", encoding="utf-8")
+    config = tmp_path / "config.yaml"
+    # Config sets a style that would also fail to recognize "1 Sam", but
+    # the CLI flag should take precedence anyway. We're really just
+    # verifying that no error arises from the override interaction.
+    config.write_text("style: en-cmos_short\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["analyze", "-c", str(config), "--style", "en-sbl", str(md)]
+    )
+    assert result.exit_code == 0
+    # en-sbl already recognizes "1 Sam", so nothing should be flagged.
+    assert "All abbreviations are recognized" in result.output

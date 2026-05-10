@@ -60,17 +60,26 @@ Names not covered by any set: PL
 
 Reference pool: 137 reference(s).
 
-Versification     Valid  Total  Score
-lxx                 132    137  96.4%
-vulgata             129    137  94.2%
+  Versification     Valid  Total  Score
+* lxx                 132    137  96.4%
+  vulgata             129    137  94.2%
 ...
+
+* configured versification (lxx)
 ```
+
+The leading marker column flags the versification declared in your config (or its metadata file) so you can see at a glance whether your configured choice is also the best fit.
+The marker only appears when a config file is supplied.
 
 To act on the report:
 
 - Add the recommended sets to your inline `style:` config block via `also_recognize`, or pick a `--style` whose recognized names already include them.
 - Set the top-ranked versification as the `versification` value in your metadata or config.
 - Add genuinely-non-Bible abbreviations (e.g., `PL` for *Patrologia Latina*) to `abbreviations_whitelist` so the indexer's abbreviation check stops flagging them.
+
+You can pass the same config file you use for indexing with `-c`/`--config`.
+`analyze` reads the `style`, `parser_sensitivity`, and `abbreviations_whitelist` keys, applies the whitelist to suppress non-Bible abbreviations from the report, and flags the configured `versification` in the ranking.
+This lets you iterate on a config and confirm it still covers the source — including custom abbreviations defined in an inline `style:` block — before re-running `index`.
 
 If the configured style already recognizes everything, the command prints `All abbreviations are recognized by the configured style.` and proceeds straight to the versification ranking.
 If the reference pool is empty (no recognized references at all), the versification ranking is skipped and the command exits with a non-zero status.
@@ -83,8 +92,9 @@ versiref-search analyze [OPTIONS] INPUT_FILES...
 
 | Option | Description |
 |--------|-------------|
-| `--style` | Named reference style (default: `en-cmos_short`) |
-| `--sensitivity` | Reference scanner sensitivity: `verse`, `chapter`, or `book` (default: `verse`) |
+| `-c`, `--config` | YAML config file (same format as `index`); supplies `style`, `parser_sensitivity`, `abbreviations_whitelist`, and the marked `versification` |
+| `--style` | Named reference style (overrides config; default: `en-cmos_short`) |
+| `--sensitivity` | Reference scanner sensitivity: `verse`, `chapter`, or `book` (overrides config; default: `verse`) |
 
 ## Metadata File
 

@@ -179,3 +179,24 @@ def test_abbreviations_pool_across_files(tmp_path, ref_style):
         "en-douay-rheims_names",
     }
     assert result.remaining == {}
+
+
+def test_abbreviations_whitelist_suppresses_names(tmp_path, ref_style):
+    # PL is a non-Bible abbreviation that would otherwise land in
+    # `remaining` since no en-* standard-name set covers it. The whitelist
+    # should drop it before greedy coverage so it appears nowhere in the
+    # report and contributes nothing to `needed_sets`.
+    md = _write(tmp_path, "doc.md", "He cites PL 1:1 and 1 Sam 3:4.\n")
+    result = analyze_abbreviations([md], ref_style, abbreviation_whitelist=["PL"])
+    assert "PL" not in result.unrecognized
+    assert "PL" not in result.remaining
+    assert "1 Sam" in result.unrecognized
+    assert result.needed_sets == ["en-sbl_abbreviations"]
+
+
+def test_abbreviations_whitelist_does_not_affect_unrelated(tmp_path, ref_style):
+    md = _write(tmp_path, "doc.md", "He cites 1 Sam 3:4.\n")
+    # Whitelisting something not in the input is a no-op.
+    result = analyze_abbreviations([md], ref_style, abbreviation_whitelist=["PL"])
+    assert "1 Sam" in result.unrecognized
+    assert result.needed_sets == ["en-sbl_abbreviations"]

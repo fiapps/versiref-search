@@ -47,6 +47,8 @@ def _scan_unrecognized(text: str, ref_style: RefStyle) -> dict[str, str]:
 def analyze_abbreviations(
     input_paths: Sequence[str | Path],
     ref_style: RefStyle,
+    *,
+    abbreviation_whitelist: Sequence[str] | None = None,
 ) -> AbbreviationAnalysis:
     """Find unrecognized book abbreviations and recommend covering name sets.
 
@@ -61,6 +63,9 @@ def analyze_abbreviations(
         input_paths: One or more Markdown (or plain text) files.
         ref_style: RefStyle controlling the chapter/verse separator and
             the baseline recognized abbreviations.
+        abbreviation_whitelist: Abbreviations to treat as recognized — they
+            are dropped from the unrecognized set before greedy coverage,
+            so they appear in neither the report nor the recommended sets.
 
     Returns:
         An AbbreviationAnalysis with the unrecognized abbreviations, the
@@ -68,10 +73,13 @@ def analyze_abbreviations(
         covered by any bundled set.
 
     """
+    whitelist = set(abbreviation_whitelist or ())
     unrecognized: dict[str, str] = {}
     for raw_path in input_paths:
         text = Path(raw_path).read_text(encoding="utf-8")
         for abbrev, example in _scan_unrecognized(text, ref_style).items():
+            if abbrev in whitelist:
+                continue
             unrecognized.setdefault(abbrev, example)
 
     identifier = ref_style.identifier or ""
