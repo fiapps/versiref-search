@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.4.1
+
+### Added
+
+- `analyze` subcommand accepts `-c`/`--config FILE`, reusing the same YAML format as `index`. The `style` (named or inline), `parser_sensitivity`, and `abbreviations_whitelist` keys take effect; whitelisted abbreviations no longer surface as "unrecognized" in the report.
+- The analyze ranking flags the configured versification (from the config or its linked metadata file) with a leading `*`, so you can see at a glance whether your configured choice is also the best fit.
+
+### Changed
+
+- `analyze` deduplicates references by canonical form before ranking. Spelling variants of the same citation ("Lk 1:28" and "Luke 1:28") and repeated citations of the same verse now contribute one entry to the reference pool rather than several, so ranking percentages reflect the diversity of references in the source rather than how often each one is cited.
+- `analyze` is much faster due to the elimination of some unnecessary processing.
+
 ## 0.4.0
 
 ### Added
