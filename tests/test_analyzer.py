@@ -100,10 +100,11 @@ def test_versification_score_dataclass_score_property():
     assert s_zero.score == 0.0
 
 
-def test_dedupe_across_versifications(tmp_path, ref_style):
-    # Lk 1:28 is recognized by every candidate, so it would be scanned 9
-    # times. The pool should still hold one entry, so total == 1.
-    md = _write(tmp_path, "doc.md", "He cites Lk 1:28.\n")
+def test_repeated_citations_count_once(tmp_path, ref_style):
+    # Three citations of the same reference — with one spelled out — fold
+    # into a single pool entry because each is canonicalized via ref_style
+    # before deduplication. Total is 1 across every candidate.
+    md = _write(tmp_path, "doc.md", "He cites Lk 1:28, then Luke 1:28, then Lk 1:28.\n")
     scores = analyze_documents([md], ref_style)
     assert all(s.total == 1 for s in scores)
 

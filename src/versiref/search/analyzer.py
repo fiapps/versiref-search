@@ -120,10 +120,20 @@ def analyze_documents(
 ) -> list[VersificationScore]:
     """Score each candidate versification by validity of references in the input.
 
-    For every candidate versification, each input file is scanned for Bible
-    references; the union of hits (deduped by file and character span)
-    becomes the reference pool. Each candidate is then scored by the
-    fraction of pool entries that are valid in it.
+    Each input file is scanned once for Bible references; the resulting
+    set of unique references is then scored against every candidate
+    versification by the fraction that are valid in it.
+
+    Scanning is versification-independent: the only thing the parser uses
+    a versification for is to tell whether a number after a book name is a
+    chapter or a verse, and that hinges on the set of single-chapter books,
+    which is the same across all known schemes.
+
+    Repeated citations of the same reference count once: each parsed
+    reference is canonicalized via ``ref_style`` before deduplication, so
+    "Lk 1:28" and "Luke 1:28" fold together. The ranking therefore
+    reflects the diversity of references covered rather than how often a
+    popular verse is cited.
 
     Args:
         input_paths: One or more Markdown files to analyze.
@@ -141,19 +151,15 @@ def analyze_documents(
         candidates = Versification.available_names()
     versifications = {name: Versification.named(name) for name in candidates}
 
-    # Each versification gets its own parser, so a reference at the same
-    # span gets visited once per scheme. The dedupe key folds those
-    # repeated hits into one pool entry.
-    pool: dict[tuple[Path, int, int], BibleRef] = {}
+    # Any versification will do for scanning; pick the first candidate.
+    # BibleRef isn't hashable, so dedupe by the canonical formatted form
+    # — this folds "Lk 1:28" and "Luke 1:28" into the same pool entry.
+    parser = RefParser(ref_style, next(iter(versifications.values())))
+    pool: dict[str, BibleRef] = {}
     for raw_path in input_paths:
-        path = Path(raw_path)
-        text = path.read_text(encoding="utf-8")
-        for vers in versifications.values():
-            parser = RefParser(ref_style, vers)
-            for ref, start_pos, end_pos in parser.scan_string(
-                text, sensitivity=parser_sensitivity
-            ):
-                pool.setdefault((path, start_pos, end_pos), ref)
+        text = Path(raw_path).read_text(encoding="utf-8")
+        for ref, _, _ in parser.scan_string(text, sensitivity=parser_sensitivity):
+            pool.setdefault(ref.format(ref_style), ref)
 
     scores: list[VersificationScore] = []
     for name in candidates:
