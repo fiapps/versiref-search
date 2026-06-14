@@ -34,9 +34,9 @@ versiref-search search book1.db book2.db -r "Ps 23"
 Results are returned in document order.
 Each result includes:
 
-- **Heading context**: the most recent heading at each level preceding the matched block, giving you the section structure. Each heading is tagged with its own block ID so you can jump to it with `context` or narrow a follow-up search with `--start`/`--end`.
+- **Heading context**: the most recent heading at each level preceding the matched block, giving you the section structure. Each heading is tagged with its own block ID so you can jump to it with `show` or narrow a follow-up search with `--start`/`--end`.
 - **Block text**: the Markdown content of the matched block. Matches are wrapped in `<mark>` tags — matched words for string searches, and cited references for reference searches. When a block is matched by both a string and a reference query, only the string matches are highlighted (see [Highlighting](#highlighting) below).
-- **Block ID**: a sequential identifier that can be used with the `context` command to retrieve surrounding content.
+- **Block ID**: a sequential identifier that can be used with the `show` command to retrieve surrounding content.
 
 ### Plain Text Output
 
@@ -127,7 +127,7 @@ Either option may be used on its own; when both are given, `--start` must not ex
 versiref-search search mybook.db -s "faith" --start 40 --end 120
 ```
 
-This is useful for focusing on a particular chapter or section whose block-ID range you already know from a previous search or from the `context` command.
+This is useful for focusing on a particular chapter or section whose block-ID range you already know from a previous search or from the `show` command.
 
 ## Highlighting
 
@@ -138,15 +138,45 @@ For reference searches, the cited reference text itself is highlighted, using th
 When a block is matched by both a string query and a reference query in a combined search, only the string-match highlighting is shown for that block; the reference highlighting is suppressed to avoid interleaving two independent sets of `<mark>` tags in the same text.
 Blocks that were matched by only one of the two query kinds still get that kind's highlighting.
 
-## Retrieving Context
+## Retrieving Content
 
-When a search result looks relevant but you need more surrounding text, use the `context` command with block IDs:
+When a search result looks relevant but you need more surrounding text, use the `show` command.
+In its simplest form it returns an explicit range of block IDs:
 
 ```sh
-versiref-search context mybook.db --start 40 --end 45
+versiref-search show mybook.db --start 40 --end 45
 ```
 
-Add `--include-headings` to prepend the heading context for the range.
+Add `--include-headings` to prepend the headings above the range.
+
+### Retrieving a Whole Section
+
+Often the unit you actually want is a whole section — a sermon, a chapter of a patristic work, a homily.
+Add `--section LEVEL` to expand the request out to the boundaries of the section at a given heading level (1–6).
+
+Anchor the section either by a block it contains, using `--start`:
+
+```sh
+versiref-search show mybook.db --start 42 --section 2
+```
+
+This returns every block from the nearest level-2 heading at or before block 42 up to (but not including) the next heading at level 2 or above.
+A shallower heading (e.g. a following level-1 chapter) also closes the section, so a section never bleeds into the next chapter.
+Add `--end` to span several sections — the result then covers every section touched by the range from `--start` to `--end`.
+
+Or anchor it by the section's heading text, using `--heading`:
+
+```sh
+versiref-search show mybook.db --heading "NATIVITY OF THE LORD" --section 2
+```
+
+The match is case-insensitive and substring-based.
+If more than one level-2 heading matches, `show` lists the candidates with their block IDs so you can re-run with `--start` instead.
+
+As with the range form, `--include-headings` prepends the ancestor headings above the section.
+
+To guard against accidentally pulling a whole work (for example, asking for everything under a level-1 heading), `show` refuses to return a section larger than `--max-blocks` blocks (default 200).
+When a section is too large it reports the block count; raise `--max-blocks` or choose a deeper `--section` level.
 
 ## Table of Contents
 
@@ -219,13 +249,16 @@ This shows the title, versification scheme, and other metadata, along with block
 | `--start` | Minimum block ID to search (inclusive) |
 | `--end` | Maximum block ID to search (inclusive) |
 
-### `context` Command
+### `show` Command
 
 | Option | Description |
 | ------ | ----------- |
-| `--start` | Starting block ID (inclusive) |
-| `--end` | Ending block ID (inclusive) |
-| `--include-headings` | Include preceding headings before the range |
+| `--start` | Starting block ID (inclusive); also the anchor block for `--section` |
+| `--end` | Ending block ID (inclusive); extends a `--section` request to span sections |
+| `--section` | Retrieve a whole section at this heading level (1–6) |
+| `--heading` | Select a section by matching its heading text (use with `--section`) |
+| `--max-blocks` | Refuse to return a section larger than this many blocks (default: 200) |
+| `--include-headings` | Include the headings above the range/section |
 
 ### `info` Command
 
@@ -234,5 +267,5 @@ No additional options.
 
 ## Python API
 
-The `versiref.search` package exports `search_database`, `get_context`, and `get_index_stats` for programmatic use.
+The `versiref.search` package exports `search_database`, `get_context`, `get_section_by_block`, `get_section_by_heading`, and `get_index_stats` for programmatic use.
 See their docstrings for full parameter documentation.

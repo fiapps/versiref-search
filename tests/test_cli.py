@@ -207,6 +207,80 @@ def test_toc_start_greater_than_end_errors(tmp_path):
     assert "--start" in result.output
 
 
+# --- show command ---
+# MINIMAL_MD_A: 1 "# Document A", 2 para (Lk 1:28), 3 "## Section A",
+# 4 para (Ps 45:10).
+
+
+def test_show_explicit_range(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["show", str(db), "--start", "2", "--end", "2"])
+    assert result.exit_code == 0
+    assert "[Block 2]" in result.output
+    assert "Lk 1:28" in result.output
+
+
+def test_show_range_requires_start_and_end(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["show", str(db), "--start", "2"])
+    assert result.exit_code != 0
+    assert "--start and --end are required" in result.output
+
+
+def test_show_section_by_block(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["show", str(db), "--start", "4", "--section", "2"])
+    assert result.exit_code == 0
+    assert "## Section A" in result.output
+    assert "Ps 45:10" in result.output
+    # The h1 above the section is not included without --include-headings.
+    assert "Document A" not in result.output
+
+
+def test_show_section_include_headings(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["show", str(db), "--start", "4", "--section", "2", "--include-headings"]
+    )
+    assert result.exit_code == 0
+    assert "# Document A" in result.output
+    assert "## Section A" in result.output
+
+
+def test_show_section_by_heading(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["show", str(db), "--heading", "Section A", "--section", "2"]
+    )
+    assert result.exit_code == 0
+    assert "## Section A" in result.output
+    assert "Ps 45:10" in result.output
+
+
+def test_show_section_too_large(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["show", str(db), "--start", "2", "--section", "1", "--max-blocks", "1"]
+    )
+    assert result.exit_code != 0
+    assert "max 1" in result.output
+    assert "--max-blocks" in result.output
+
+
+def test_show_heading_requires_section(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["show", str(db), "--heading", "Section A"])
+    assert result.exit_code != 0
+    assert "--heading requires --section" in result.output
+
+
 # --- info command ---
 
 

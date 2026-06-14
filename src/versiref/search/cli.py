@@ -10,7 +10,16 @@ from versiref import RefStyle, Sensitivity
 from .analyzer import analyze_abbreviations, analyze_documents
 from .indexer import index_document, get_index_stats
 from .models import AbbreviationAnalysis, VersificationScore
-from .searcher import search_database, get_context, get_toc
+from .searcher import (
+    AmbiguousSectionError,
+    DEFAULT_MAX_SECTION_BLOCKS,
+    SectionTooLargeError,
+    get_context,
+    get_section_by_block,
+    get_section_by_heading,
+    get_toc,
+    search_database,
+)
 
 
 def _load_metadata(path: Path) -> dict:
@@ -396,28 +405,113 @@ def info(databases: tuple[Path, ...]) -> None:
 @click.argument(
     "database", type=click.Path(exists=True, dir_okay=False, path_type=Path)
 )
-@click.option("--start", required=True, type=int, help="Starting block ID (inclusive)")
-@click.option("--end", required=True, type=int, help="Ending block ID (inclusive)")
+@click.option(
+    "--start",
+    type=int,
+    default=None,
+    help="Starting block ID (inclusive)",
+)
+@click.option(
+    "--end",
+    type=int,
+    default=None,
+    help="Ending block ID (inclusive)",
+)
+@click.option(
+    "--section",
+    "section_level",
+    type=int,
+    default=None,
+    help=(
+        "Retrieve a whole section at heading LEVEL (1-6). Anchor it with "
+        "--start (block) or --heading (text); add --end to span sections."
+    ),
+)
+@click.option(
+    "--heading",
+    "heading_text",
+    default=None,
+    help="Select a section by matching its heading text (use with --section)",
+)
+@click.option(
+    "--max-blocks",
+    type=int,
+    default=DEFAULT_MAX_SECTION_BLOCKS,
+    show_default=True,
+    help="Refuse to return a section larger than this many blocks",
+)
 @click.option(
     "--include-headings",
     is_flag=True,
-    help="Include preceding headings before the range",
+    help="Include the headings above the range/section",
 )
-def context(database: Path, start: int, end: int, include_headings: bool) -> None:
-    """Retrieve a range of content blocks with optional heading context.
+def show(
+    database: Path,
+    start: int | None,
+    end: int | None,
+    section_level: int | None,
+    heading_text: str | None,
+    max_blocks: int,
+    include_headings: bool,
+) -> None:
+    r"""Retrieve content blocks from a database.
 
-    Returns blocks from START to END (inclusive) in document order.
+    Three modes:
+
+    \b
+      Range:           --start S --end E
+      Section by block: --start S --section L  (add --end to span sections)
+      Section by text:  --heading TEXT --section L
+
+    Blocks are returned in document order.
     """
     try:
-        blocks = get_context(
-            db_path=database,
-            start_id=start,
-            end_id=end,
-            include_headings=include_headings,
-        )
+        if section_level is not None:
+            if heading_text is not None:
+                if start is not None or end is not None:
+                    raise click.UsageError(
+                        "--heading cannot be combined with --start/--end"
+                    )
+                blocks = get_section_by_heading(
+                    db_path=database,
+                    heading_text=heading_text,
+                    level=section_level,
+                    include_headings=include_headings,
+                    max_blocks=max_blocks,
+                )
+            else:
+                if start is None:
+                    raise click.UsageError(
+                        "--section requires --start (block) or --heading (text)"
+                    )
+                if end is not None and end < start:
+                    raise click.UsageError("--end must not be less than --start")
+                blocks = get_section_by_block(
+                    db_path=database,
+                    block_id=start,
+                    level=section_level,
+                    end_id=end,
+                    include_headings=include_headings,
+                    max_blocks=max_blocks,
+                )
+        else:
+            if heading_text is not None:
+                raise click.UsageError("--heading requires --section LEVEL")
+            if start is None or end is None:
+                raise click.UsageError(
+                    "--start and --end are required (or use --section)"
+                )
+            if start > end:
+                raise click.UsageError("--start must not exceed --end")
+            blocks = get_context(
+                db_path=database,
+                start_id=start,
+                end_id=end,
+                include_headings=include_headings,
+            )
 
         if not blocks:
-            click.echo("No blocks found in specified range.")
+            click.echo("No blocks found.")
             return
 
         # Display blocks
@@ -434,7 +528,28 @@ def context(database: Path, start: int, end: int, include_headings: bool) -> Non
                 click.echo(f"[Block {block.id}]")
                 click.echo(block.text)
 
+    except click.UsageError:
+        raise
+    except SectionTooLargeError as e:
+        click.echo(
+            f"Error: section has {e.block_count} blocks (max {e.max_blocks}).\n"
+            "Raise --max-blocks or use a deeper --section level.",
+            err=True,
+        )
+        sys.exit(1)
+    except AmbiguousSectionError as e:
+        click.echo(
+            "Error: multiple headings match; re-run with --start using one of "
+            "these block IDs:",
+            err=True,
+        )
+        for candidate in e.candidates:
+            click.echo(f"  {candidate.text.strip()} {{block={candidate.id}}}", err=True)
+        sys.exit(1)
     except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    except ValueError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
     except Exception as e:

@@ -6,6 +6,35 @@ from versiref import Versification, RefParser, RefStyle
 from .database import Database
 from .models import SearchResult, BlockInfo
 
+DEFAULT_MAX_SECTION_BLOCKS = 200
+
+
+class SectionTooLargeError(Exception):
+    """Raised when a requested section exceeds the maximum block count.
+
+    Carries the actual ``block_count`` and the ``max_blocks`` limit so callers
+    can craft an actionable message.
+    """
+
+    def __init__(self, block_count: int, max_blocks: int):
+        """Record the offending block count and the limit it exceeded."""
+        self.block_count = block_count
+        self.max_blocks = max_blocks
+        super().__init__(f"section has {block_count} blocks (max {max_blocks})")
+
+
+class AmbiguousSectionError(Exception):
+    """Raised when a heading-text query matches more than one section.
+
+    Carries the matching headings as ``candidates`` (a list of BlockInfo) so
+    callers can list them for disambiguation.
+    """
+
+    def __init__(self, candidates: list[BlockInfo]):
+        """Record the matching headings for the caller to disambiguate."""
+        self.candidates = candidates
+        super().__init__(f"{len(candidates)} headings match the query")
+
 
 def _wrap_reference_spans(text: str, spans: set[tuple[int, int]]) -> str:
     """Wrap reference character ranges in ``<mark>…</mark>`` tags.
@@ -274,3 +303,191 @@ def get_context(
             )
 
         return blocks
+
+
+def _collect_section(
+    db: Database,
+    section_start_id: int,
+    end_anchor_id: int,
+    level: int,
+    include_headings: bool,
+    max_blocks: int,
+) -> list[BlockInfo]:
+    """Assemble the blocks of a section between two heading boundaries.
+
+    The section runs from ``section_start_id`` (the opening heading, inclusive)
+    up to but excluding the next heading at level <= ``level`` that follows
+    ``end_anchor_id``. ``end_anchor_id`` equals ``section_start_id`` for a
+    single section, or a later block when expanding to span several.
+
+    Raises:
+        SectionTooLargeError: If the section spans more than ``max_blocks``.
+
+    """
+    next_id = db.get_next_heading_id(end_anchor_id, level)
+    if next_id is not None:
+        last_id = next_id - 1
+    else:
+        max_id = db.get_max_content_id()
+        if max_id is None:
+            return []
+        last_id = max_id
+
+    count = db.count_content_range(section_start_id, last_id)
+    if count > max_blocks:
+        raise SectionTooLargeError(count, max_blocks)
+
+    blocks: list[BlockInfo] = []
+
+    # Optionally prepend the ancestor headings above the section (the section's
+    # own heading is the first block of the range, so only shallower levels).
+    if include_headings:
+        ancestors = db.get_all_preceding_headings(section_start_id)
+        for lvl in sorted(ancestors):
+            if lvl < level:
+                heading_id, heading_text = ancestors[lvl]
+                blocks.append(
+                    BlockInfo(id=heading_id, text=heading_text, heading_level=lvl)
+                )
+
+    for block_id, block_text, heading_level in db.get_content_range(
+        section_start_id, last_id
+    ):
+        blocks.append(
+            BlockInfo(id=block_id, text=block_text, heading_level=heading_level)
+        )
+
+    return blocks
+
+
+def get_section_by_block(
+    db_path: str | Path,
+    block_id: int,
+    level: int,
+    end_id: int | None = None,
+    include_headings: bool = False,
+    max_blocks: int = DEFAULT_MAX_SECTION_BLOCKS,
+) -> list[BlockInfo]:
+    """Get the whole section, at a heading level, containing a block.
+
+    Finds the nearest heading at ``level`` at or before ``block_id`` (the
+    section's opening heading) and returns every block from it up to but
+    excluding the next heading at level <= ``level``. When ``end_id`` is given
+    and lies in a later section, the result expands to span through that
+    section too.
+
+    Args:
+        db_path: Path to SQLite database file
+        block_id: Block whose enclosing section is wanted (range start)
+        level: Heading level (1-6) that defines section boundaries
+        end_id: Optional block ID extending the range; the section(s) covering
+            ``block_id`` through ``end_id`` are returned. Defaults to block_id.
+        include_headings: Whether to prepend the ancestor headings above the
+            section
+        max_blocks: Maximum number of blocks before refusing
+
+    Returns:
+        List of BlockInfo objects in document order
+
+    Raises:
+        FileNotFoundError: If database doesn't exist
+        IncompatibleDatabaseError: If the database is not a compatible
+            versiref-search index
+        ValueError: If level is not between 1 and 6, end_id < block_id, or the
+            block is not inside a section at the requested level
+        SectionTooLargeError: If the section spans more than max_blocks
+
+    """
+    if level < 1 or level > 6:
+        raise ValueError(f"level must be between 1 and 6 (got {level})")
+
+    if end_id is None:
+        end_id = block_id
+    if end_id < block_id:
+        raise ValueError(
+            f"end_id ({end_id}) must not be less than block_id ({block_id})"
+        )
+
+    db_path = Path(db_path)
+    if not db_path.exists():
+        raise FileNotFoundError(f"Database not found: {db_path}")
+
+    with Database(db_path) as db:
+        db.validate_schema()
+
+        enclosing = db.get_enclosing_heading(block_id, level)
+        if enclosing is None:
+            raise ValueError(
+                f"No heading at level {level} or above precedes block {block_id}"
+            )
+        section_start_id, _, enclosing_level = enclosing
+        if enclosing_level != level:
+            raise ValueError(
+                f"Block {block_id} is not within a level-{level} section "
+                f"(nearest enclosing heading is level {enclosing_level} "
+                f"at block {section_start_id})"
+            )
+
+        return _collect_section(
+            db, section_start_id, end_id, level, include_headings, max_blocks
+        )
+
+
+def get_section_by_heading(
+    db_path: str | Path,
+    heading_text: str,
+    level: int,
+    include_headings: bool = False,
+    max_blocks: int = DEFAULT_MAX_SECTION_BLOCKS,
+) -> list[BlockInfo]:
+    """Get the whole section whose heading text matches a query.
+
+    Matches headings at ``level`` whose text contains ``heading_text``
+    (case-insensitive). The matched heading and every following block up to
+    but excluding the next heading at level <= ``level`` are returned.
+
+    Args:
+        db_path: Path to SQLite database file
+        heading_text: Substring to match against level-``level`` headings
+        level: Heading level (1-6) that defines section boundaries
+        include_headings: Whether to prepend the ancestor headings above the
+            section
+        max_blocks: Maximum number of blocks before refusing
+
+    Returns:
+        List of BlockInfo objects in document order
+
+    Raises:
+        FileNotFoundError: If database doesn't exist
+        IncompatibleDatabaseError: If the database is not a compatible
+            versiref-search index
+        ValueError: If level is not between 1 and 6, or no heading matches
+        AmbiguousSectionError: If more than one heading matches
+        SectionTooLargeError: If the section spans more than max_blocks
+
+    """
+    if level < 1 or level > 6:
+        raise ValueError(f"level must be between 1 and 6 (got {level})")
+
+    db_path = Path(db_path)
+    if not db_path.exists():
+        raise FileNotFoundError(f"Database not found: {db_path}")
+
+    with Database(db_path) as db:
+        db.validate_schema()
+
+        matches = db.find_headings_by_text(heading_text, level)
+        if not matches:
+            raise ValueError(f"No level-{level} heading matches {heading_text!r}")
+        if len(matches) > 1:
+            raise AmbiguousSectionError(
+                [
+                    BlockInfo(id=mid, text=mtext, heading_level=level)
+                    for mid, mtext in matches
+                ]
+            )
+
+        section_start_id = matches[0][0]
+        return _collect_section(
+            db, section_start_id, section_start_id, level, include_headings, max_blocks
+        )

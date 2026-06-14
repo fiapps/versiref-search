@@ -123,13 +123,13 @@ This allows searching for "Isaiah 7:14" to match documents citing "Isaiah 7:7-16
 - `cli.py`: Click-based CLI entry point
 - `__init__.py`: Public API exports
 
-**CLI entry point**: `versiref-search` with subcommands `index`, `search`, `context`
+**CLI entry point**: `versiref-search` with subcommands `index`, `search`, `show`
 
 **Test modules** (under `tests/`): covers all non-CLI modules
 
 **Implemented Components**:
 1. **Indexing module**: `indexer.py` + CLI `index` command — parses Markdown and builds SQLite databases
-2. **Search module**: `searcher.py` + CLI `search` and `context` commands — queries databases by reference or string
+2. **Search module**: `searcher.py` + CLI `search` and `show` commands — queries databases by reference or string
 3. **Python API**: Public interface exported from `__init__.py`
 
 ## Key Dependencies

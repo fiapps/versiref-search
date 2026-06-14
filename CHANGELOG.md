@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Every command that reads a database (`search`, `context`, `info`, and the table-of-contents reader) now verifies that the file is a versiref-search index before using it. A database from another versiref tool (e.g. versiref-bible), or one built before this check existed, is rejected up front with a clear message telling you to re-index, instead of failing partway through. New indexes carry a `format` marker so they pass the check.
+- `show` can now retrieve a whole section at once. Add `--section LEVEL` to pull everything under a heading of that level — a sermon, a chapter of a patristic work, and the like. Point at it with a block it contains (`--start 42 --section 2`) or by its heading text (`--heading "NATIVITY OF THE LORD" --section 2`); add `--end` to span several sections. A section stops at the next heading of the same or a shallower level, so it never spills into the following chapter. To prevent accidentally pulling a whole work, `show` refuses sections larger than `--max-blocks` (default 200) and tells you to raise the limit or pick a deeper level.
+- Every command that reads a database (`search`, `show`, `info`, and the table-of-contents reader) now verifies that the file is a versiref-search index before using it. A database from another versiref tool (e.g. versiref-bible), or one built before this check existed, is rejected up front with a clear message telling you to re-index, instead of failing partway through. New indexes carry a `format` marker so they pass the check.
+
+### Changed
+
+- The `context` command is now named `show`. Its existing block-range behaviour (`--start`/`--end`) is unchanged.
 
 ## 0.4.1
 

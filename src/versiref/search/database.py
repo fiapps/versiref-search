@@ -497,6 +497,116 @@ class Database:
                 headings[level] = heading
         return headings
 
+    def get_enclosing_heading(
+        self, block_id: int, max_level: int
+    ) -> tuple[int, str, int] | None:
+        """Get the nearest heading at or above a level that precedes a block.
+
+        Returns the most recent heading whose level is <= ``max_level`` and
+        whose ID is <= ``block_id``. This is the heading that opens the section
+        the block belongs to (when its level equals ``max_level``); a shallower
+        level means the block is not inside a section at the requested level.
+
+        Args:
+            block_id: Content block ID (inclusive — a heading at this ID counts)
+            max_level: Highest (shallowest) heading level to consider
+
+        Returns:
+            Tuple of (id, block_text, heading_level), or None if no qualifying
+            heading precedes the block.
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+
+        cursor = self.conn.execute(
+            """SELECT id, block_text, heading_level
+               FROM content
+               WHERE id <= ? AND heading_level IS NOT NULL AND heading_level <= ?
+               ORDER BY id DESC
+               LIMIT 1""",
+            (block_id, max_level),
+        )
+        row = cursor.fetchone()
+        return (row["id"], row["block_text"], row["heading_level"]) if row else None
+
+    def get_next_heading_id(self, block_id: int, max_level: int) -> int | None:
+        """Get the ID of the next heading at or above a level after a block.
+
+        Returns the smallest content ID greater than ``block_id`` whose heading
+        level is <= ``max_level``. This marks where the current section ends: a
+        heading of the same level starts a sibling section, and a shallower
+        heading closes the enclosing one.
+
+        Args:
+            block_id: Content block ID to search after (exclusive)
+            max_level: Highest (shallowest) heading level to consider
+
+        Returns:
+            The next heading's content ID, or None if none follows.
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+
+        cursor = self.conn.execute(
+            """SELECT id
+               FROM content
+               WHERE id > ? AND heading_level IS NOT NULL AND heading_level <= ?
+               ORDER BY id ASC
+               LIMIT 1""",
+            (block_id, max_level),
+        )
+        row = cursor.fetchone()
+        return row["id"] if row else None
+
+    def find_headings_by_text(self, text: str, level: int) -> list[tuple[int, str]]:
+        """Find headings at a level whose text contains a substring.
+
+        Matching is case-insensitive and substring-based, against the stored
+        heading text (which includes the leading ``#`` markers).
+
+        Args:
+            text: Substring to look for
+            level: Exact heading level to match
+
+        Returns:
+            List of (id, block_text) tuples in document order.
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+
+        cursor = self.conn.execute(
+            "SELECT id, block_text FROM content WHERE heading_level = ? ORDER BY id",
+            (level,),
+        )
+        needle = text.lower()
+        return [
+            (row["id"], row["block_text"])
+            for row in cursor.fetchall()
+            if needle in row["block_text"].lower()
+        ]
+
+    def get_max_content_id(self) -> int | None:
+        """Get the highest content block ID, or None if the table is empty."""
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+
+        cursor = self.conn.execute("SELECT MAX(id) AS max_id FROM content")
+        return cursor.fetchone()["max_id"]
+
+    def count_content_range(self, start_id: int, end_id: int) -> int:
+        """Count content blocks with ID in ``[start_id, end_id]`` (inclusive)."""
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+
+        cursor = self.conn.execute(
+            "SELECT COUNT(*) AS count FROM content WHERE id >= ? AND id <= ?",
+            (start_id, end_id),
+        )
+        return cursor.fetchone()["count"]
+
     def count_content_blocks(self) -> int:
         """Count total number of content blocks.
 

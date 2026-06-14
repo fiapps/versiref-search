@@ -5,12 +5,53 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from versiref.search import (
+    AmbiguousSectionError,
     IncompatibleDatabaseError,
+    SectionTooLargeError,
     get_context,
+    get_section_by_block,
+    get_section_by_heading,
     get_toc,
+    index_document,
     search_database,
 )
 from versiref.search.database import Database
+
+
+@pytest.fixture
+def multi_section_db(tmp_path, ref_style):
+    """Build a database with two sibling level-2 sections under two level-1 chapters.
+
+    Block layout:
+      1  # Chapter One        (h1)
+      2  Intro paragraph.
+      3  ## Reading           (h2)
+      4  First reading paragraph.
+      5  ## Reading           (h2)
+      6  Second reading paragraph.
+      7  # Chapter Two         (h1)
+      8  Chapter two paragraph.
+    """
+    content = (
+        "# Chapter One\n\n"
+        "Intro paragraph.\n\n"
+        "## Reading\n\n"
+        "First reading paragraph.\n\n"
+        "## Reading\n\n"
+        "Second reading paragraph.\n\n"
+        "# Chapter Two\n\n"
+        "Chapter two paragraph.\n"
+    )
+    md = tmp_path / "multi.md"
+    md.write_text(content, encoding="utf-8")
+    db = tmp_path / "multi.db"
+    index_document(
+        input_path=md,
+        output_path=db,
+        metadata={"title": "Multi", "versification": "eng", "lang": "en"},
+        ref_style=ref_style,
+    )
+    return db
 
 
 # --- Error cases ---
@@ -261,6 +302,112 @@ def test_get_context_empty_range(indexed_db):
 def test_get_context_missing_db(tmp_path):
     with pytest.raises(FileNotFoundError):
         get_context(tmp_path / "nonexistent.db", start_id=1, end_id=5)
+
+
+# --- get_section_by_block ---
+# indexed_db layout: 1 "# Chapter One", 2 para (Lk 1:28), 3 "## Section A",
+# 4 para (Ps 45:10), 5 para.
+
+
+def test_section_by_block_returns_whole_section(indexed_db):
+    blocks = get_section_by_block(indexed_db, block_id=4, level=2)
+    assert [b.id for b in blocks] == [3, 4, 5]
+    assert blocks[0].heading_level == 2
+
+
+def test_section_by_block_level_one_spans_document(indexed_db):
+    blocks = get_section_by_block(indexed_db, block_id=2, level=1)
+    assert [b.id for b in blocks] == [1, 2, 3, 4, 5]
+
+
+def test_section_by_block_not_under_requested_level(indexed_db):
+    # Block 2 sits under the h1 only; there is no enclosing h2.
+    with pytest.raises(ValueError, match="not within a level-2 section"):
+        get_section_by_block(indexed_db, block_id=2, level=2)
+
+
+def test_section_by_block_include_headings_prepends_ancestors(indexed_db):
+    blocks = get_section_by_block(
+        indexed_db, block_id=4, level=2, include_headings=True
+    )
+    # h1 (block 1) is prepended; the section itself opens with h2 (block 3).
+    assert [b.id for b in blocks] == [1, 3, 4, 5]
+    assert blocks[0].heading_level == 1
+
+
+def test_section_by_block_too_large_raises(indexed_db):
+    with pytest.raises(SectionTooLargeError) as exc:
+        get_section_by_block(indexed_db, block_id=2, level=1, max_blocks=2)
+    assert exc.value.block_count == 5
+    assert exc.value.max_blocks == 2
+
+
+def test_section_by_block_invalid_level(indexed_db):
+    with pytest.raises(ValueError, match="level must be between 1 and 6"):
+        get_section_by_block(indexed_db, block_id=4, level=0)
+
+
+def test_section_by_block_end_before_start(indexed_db):
+    with pytest.raises(ValueError, match="must not be less than"):
+        get_section_by_block(indexed_db, block_id=4, level=2, end_id=2)
+
+
+def test_section_by_block_missing_db(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        get_section_by_block(tmp_path / "nope.db", block_id=1, level=1)
+
+
+# --- get_section_by_block boundary behaviour (multi_section_db) ---
+
+
+def test_section_stops_at_sibling_heading(multi_section_db):
+    # Block 4 is under the first "## Reading" (block 3); the section ends
+    # before the next h2 at block 5.
+    blocks = get_section_by_block(multi_section_db, block_id=4, level=2)
+    assert [b.id for b in blocks] == [3, 4]
+
+
+def test_section_stops_at_shallower_heading(multi_section_db):
+    # Block 6 is under the second "## Reading" (block 5); a level-1 heading
+    # (block 7) closes it even though it is shallower than the section level.
+    blocks = get_section_by_block(multi_section_db, block_id=6, level=2)
+    assert [b.id for b in blocks] == [5, 6]
+
+
+def test_section_by_block_span_multiple(multi_section_db):
+    # Spanning blocks 4..6 pulls both "## Reading" sections, stopping at the
+    # level-1 heading (block 7).
+    blocks = get_section_by_block(multi_section_db, block_id=4, level=2, end_id=6)
+    assert [b.id for b in blocks] == [3, 4, 5, 6]
+
+
+# --- get_section_by_heading ---
+
+
+def test_section_by_heading_returns_section(indexed_db):
+    blocks = get_section_by_heading(indexed_db, "Section A", level=2)
+    assert [b.id for b in blocks] == [3, 4, 5]
+
+
+def test_section_by_heading_case_insensitive(indexed_db):
+    blocks = get_section_by_heading(indexed_db, "section a", level=2)
+    assert [b.id for b in blocks] == [3, 4, 5]
+
+
+def test_section_by_heading_no_match(indexed_db):
+    with pytest.raises(ValueError, match="No level-2 heading matches"):
+        get_section_by_heading(indexed_db, "Nonexistent", level=2)
+
+
+def test_section_by_heading_ambiguous(multi_section_db):
+    with pytest.raises(AmbiguousSectionError) as exc:
+        get_section_by_heading(multi_section_db, "Reading", level=2)
+    assert [c.id for c in exc.value.candidates] == [3, 5]
+
+
+def test_section_by_heading_invalid_level(indexed_db):
+    with pytest.raises(ValueError, match="level must be between 1 and 6"):
+        get_section_by_heading(indexed_db, "Section A", level=7)
 
 
 # --- get_toc ---
