@@ -74,7 +74,7 @@ def test_invalid_reference_raises(indexed_db, ref_style):
 
 @pytest.fixture
 def unmarked_db(tmp_path):
-    """A schema-correct database with no 'format' marker (legacy-style)."""
+    """Build a schema-correct database with no 'format' marker (legacy-style)."""
     path = tmp_path / "unmarked.db"
     with Database(path) as db:
         db.create_schema()
