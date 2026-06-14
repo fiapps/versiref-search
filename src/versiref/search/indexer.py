@@ -6,7 +6,7 @@ from typing import Literal
 from pathlib import Path
 from versiref import Versification, RefParser, RefStyle, Sensitivity
 
-from .database import Database, SCHEMA_VERSION
+from .database import Database, PRODUCT_NAME, SCHEMA_VERSION
 from .markdown_parser import parse_markdown
 
 logger = logging.getLogger(__name__)
@@ -148,6 +148,7 @@ def index_document(
         db.create_schema()
 
         # Set metadata
+        db.set_metadata("format", PRODUCT_NAME)
         db.set_metadata("schema_version", SCHEMA_VERSION)
         db.set_metadata("versification_scheme", versification)
         for key, value in metadata.items():
@@ -223,6 +224,8 @@ def get_index_stats(db_path: str | Path) -> dict:
 
     Raises:
         FileNotFoundError: If database doesn't exist
+        IncompatibleDatabaseError: If the database is not a compatible
+            versiref-search index
 
     """
     db_path = Path(db_path)
@@ -230,6 +233,7 @@ def get_index_stats(db_path: str | Path) -> dict:
         raise FileNotFoundError(f"Database not found: {db_path}")
 
     with Database(db_path) as db:
+        db.validate_schema()
         return {
             "block_count": db.count_content_blocks(),
             "reference_count": db.count_references(),

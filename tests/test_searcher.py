@@ -4,7 +4,13 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from versiref.search import get_context, get_toc, search_database
+from versiref.search import (
+    IncompatibleDatabaseError,
+    get_context,
+    get_toc,
+    search_database,
+)
+from versiref.search.database import Database
 
 
 # --- Error cases ---
@@ -23,6 +29,32 @@ def test_missing_db_raises(tmp_path, ref_style):
 def test_invalid_reference_raises(indexed_db, ref_style):
     with pytest.raises(ValueError):
         search_database(indexed_db, ref_style, reference_query="NotABook 99:99")
+
+
+@pytest.fixture
+def unmarked_db(tmp_path):
+    """A schema-correct database with no 'format' marker (legacy-style)."""
+    path = tmp_path / "unmarked.db"
+    with Database(path) as db:
+        db.create_schema()
+        db.set_metadata("schema_version", "1.0")
+        db.set_metadata("versification_scheme", "eng")
+    return path
+
+
+def test_search_rejects_unmarked_db(unmarked_db, ref_style):
+    with pytest.raises(IncompatibleDatabaseError, match="format"):
+        search_database(unmarked_db, ref_style, string_query="text")
+
+
+def test_toc_rejects_unmarked_db(unmarked_db):
+    with pytest.raises(IncompatibleDatabaseError, match="format"):
+        get_toc(unmarked_db)
+
+
+def test_context_rejects_unmarked_db(unmarked_db):
+    with pytest.raises(IncompatibleDatabaseError, match="format"):
+        get_context(unmarked_db, 1, 1)
 
 
 # --- Reference search ---

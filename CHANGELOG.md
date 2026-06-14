@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Every command that reads a database (`search`, `context`, `info`, and the table-of-contents reader) now verifies that the file is a versiref-search index before using it. A database from another versiref tool (e.g. versiref-bible), or one built before this check existed, is rejected up front with a clear message telling you to re-index, instead of failing partway through. New indexes carry a `format` marker so they pass the check.
+
 ## 0.4.1
 
 ### Added

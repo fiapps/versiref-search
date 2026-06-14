@@ -1,7 +1,13 @@
 """Tests for Database operations."""
 
 import pytest
-from versiref.search.database import Database
+from versiref.search.database import (
+    Database,
+    IncompatibleDatabaseError,
+    PRODUCT_NAME,
+    SCHEMA_VERSION,
+    _parse_schema_version,
+)
 
 
 @pytest.fixture
@@ -52,6 +58,77 @@ def test_get_all_metadata(db):
     meta = db.get_all_metadata()
     assert meta["a"] == "1"
     assert meta["b"] == "2"
+
+
+# --- Schema validation ---
+
+
+def _mark(db, *, fmt=PRODUCT_NAME, version=SCHEMA_VERSION):
+    """Write the product marker and schema version onto a database."""
+    if fmt is not None:
+        db.set_metadata("format", fmt)
+    if version is not None:
+        db.set_metadata("schema_version", version)
+
+
+def test_validate_schema_accepts_current(db):
+    _mark(db)
+    db.validate_schema()  # should not raise
+
+
+def test_validate_schema_missing_format_raises(db):
+    _mark(db, fmt=None)
+    with pytest.raises(IncompatibleDatabaseError, match="format"):
+        db.validate_schema()
+
+
+def test_validate_schema_wrong_product_raises(db):
+    _mark(db, fmt="versiref-bible")
+    with pytest.raises(IncompatibleDatabaseError, match="versiref-bible"):
+        db.validate_schema()
+
+
+def test_validate_schema_missing_version_raises(db):
+    _mark(db, version=None)
+    with pytest.raises(IncompatibleDatabaseError, match="schema_version"):
+        db.validate_schema()
+
+
+def test_validate_schema_unparseable_version_raises(db):
+    _mark(db, version="not.a.version")
+    with pytest.raises(IncompatibleDatabaseError, match="unparseable"):
+        db.validate_schema()
+
+
+def test_validate_schema_accepts_newer_minor(db):
+    # A 1.1 database satisfies code written against 1.0 (additive changes).
+    _mark(db, version="1.1")
+    db.validate_schema()
+
+
+def test_validate_schema_rejects_newer_major(db):
+    _mark(db, version="2.0")
+    with pytest.raises(IncompatibleDatabaseError, match="incompatible"):
+        db.validate_schema()
+
+
+def test_validate_schema_rejects_older_minor(db, monkeypatch):
+    # Code requiring 1.1 must reject a 1.0 database that lacks the additions.
+    monkeypatch.setattr("versiref.search.database.SCHEMA_VERSION", "1.1")
+    _mark(db, version="1.0")
+    with pytest.raises(IncompatibleDatabaseError, match="incompatible"):
+        db.validate_schema()
+
+
+def test_parse_schema_version_valid():
+    assert _parse_schema_version("1.0") == (1, 0)
+    assert _parse_schema_version("12.34") == (12, 34)
+
+
+@pytest.mark.parametrize("value", ["1", "1.0.0", "x.y", "1.x", ""])
+def test_parse_schema_version_invalid(value):
+    with pytest.raises(ValueError):
+        _parse_schema_version(value)
 
 
 # --- Content blocks ---

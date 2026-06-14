@@ -4,7 +4,37 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+# Identifies databases produced by this package, distinguishing them from
+# other versiref-ecosystem SQLite files (e.g. versiref-bible) that share the
+# "schema_version" key. Written to the metadata "format" key at index time.
+PRODUCT_NAME = "versiref-search"
+
+# Schema contract version (major.minor), independent of the package version.
+# Minor bumps are additive (new tables/columns); a major bump signals a
+# breaking change. Code requiring X.Y accepts any database whose major equals
+# X and whose minor is >= Y.
 SCHEMA_VERSION = "1.0"
+
+
+class IncompatibleDatabaseError(Exception):
+    """Raised when a database is not a compatible versiref-search index."""
+
+
+def _parse_schema_version(value: str) -> tuple[int, int]:
+    """Parse a ``"major.minor"`` schema version into an ``(int, int)`` tuple.
+
+    Raises:
+        ValueError: If the value is not two dot-separated integers.
+
+    """
+    parts = value.split(".")
+    if len(parts) != 2:
+        raise ValueError("expected 'major.minor'")
+    try:
+        return int(parts[0]), int(parts[1])
+    except ValueError:
+        raise ValueError("major and minor must be integers")
+
 
 SCHEMA_SQL = """
 -- Stores Markdown blocks in document order
@@ -143,6 +173,52 @@ class Database:
 
         cursor = self.conn.execute("SELECT key, value FROM metadata")
         return {row["key"]: row["value"] for row in cursor.fetchall()}
+
+    def validate_schema(self) -> None:
+        """Verify this database is a compatible versiref-search index.
+
+        Checks the product identity marker first (so that another
+        versiref-ecosystem database is rejected cleanly rather than failing
+        later on a missing table), then the schema version using the additive
+        rule: the database's major version must equal this code's major
+        version, and its minor version must be >= this code's minor version
+        (:data:`SCHEMA_VERSION`).
+
+        Raises:
+            IncompatibleDatabaseError: If the database lacks the product
+                marker (legacy/unmarked — re-index to fix), declares a
+                different product, or has an incompatible schema version.
+
+        """
+        product = self.get_metadata("format")
+        if product is None:
+            raise IncompatibleDatabaseError(
+                f"{self.db_path}: not a versiref-search database "
+                "(missing 'format' marker); re-index the source document"
+            )
+        if product != PRODUCT_NAME:
+            raise IncompatibleDatabaseError(
+                f"{self.db_path}: database format is '{product}', not '{PRODUCT_NAME}'"
+            )
+
+        version = self.get_metadata("schema_version")
+        if version is None:
+            raise IncompatibleDatabaseError(
+                f"{self.db_path}: missing schema_version metadata"
+            )
+        try:
+            db_major, db_minor = _parse_schema_version(version)
+        except ValueError as e:
+            raise IncompatibleDatabaseError(
+                f"{self.db_path}: unparseable schema_version '{version}': {e}"
+            )
+
+        req_major, req_minor = _parse_schema_version(SCHEMA_VERSION)
+        if db_major != req_major or db_minor < req_minor:
+            raise IncompatibleDatabaseError(
+                f"{self.db_path}: schema version {version} is incompatible with "
+                f"this code (requires {SCHEMA_VERSION})"
+            )
 
     def insert_content(self, block_text: str, heading_level: int | None = None) -> int:
         """Insert a content block.

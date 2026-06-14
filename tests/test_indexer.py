@@ -10,7 +10,8 @@ from versiref.search import (
     get_index_stats,
     find_unrecognized_abbreviations,
 )
-from versiref.search.database import SCHEMA_VERSION
+from versiref.search import IncompatibleDatabaseError
+from versiref.search.database import Database, SCHEMA_VERSION
 
 SAMPLE_MD = Path(__file__).parent / "data" / "irenaeus-ah-3.21.md"
 
@@ -66,6 +67,16 @@ def test_metadata_stored(indexed_db):
     assert meta["lang"] == "en"
     assert meta["author"] == "Test Author"
     assert meta["schema_version"] == SCHEMA_VERSION
+    assert meta["format"] == "versiref-search"
+
+
+def test_stats_rejects_unmarked_db(tmp_path):
+    path = tmp_path / "unmarked.db"
+    with Database(path) as db:
+        db.create_schema()
+        db.set_metadata("schema_version", "1.0")
+    with pytest.raises(IncompatibleDatabaseError, match="format"):
+        get_index_stats(path)
 
 
 def test_author_omitted_when_not_provided(tmp_path, minimal_md, ref_style):

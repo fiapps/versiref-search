@@ -63,6 +63,8 @@ def search_database(
 
     Raises:
         FileNotFoundError: If database doesn't exist
+        IncompatibleDatabaseError: If the database is not a compatible
+            versiref-search index
         ValueError: If neither reference_query nor string_query is provided,
             or if reference_query is invalid, or if versification mapping fails,
             or if start_id > end_id
@@ -81,6 +83,8 @@ def search_database(
         raise FileNotFoundError(f"Database not found: {db_path}")
 
     with Database(db_path) as db:
+        db.validate_schema()
+
         # Get versification from database metadata
         versification_name = db.get_metadata("versification_scheme")
         if not versification_name:
@@ -199,6 +203,8 @@ def get_toc(
 
     Raises:
         FileNotFoundError: If database doesn't exist
+        IncompatibleDatabaseError: If the database is not a compatible
+            versiref-search index
         ValueError: If depth is not between 1 and 6, or if start_id > end_id
 
     """
@@ -212,6 +218,7 @@ def get_toc(
         raise FileNotFoundError(f"Database not found: {db_path}")
 
     with Database(db_path) as db:
+        db.validate_schema()
         rows = db.get_headings(max_level=depth, block_start=start_id, block_end=end_id)
         return [
             BlockInfo(id=block_id, text=text, heading_level=level)
@@ -238,6 +245,8 @@ def get_context(
 
     Raises:
         FileNotFoundError: If database doesn't exist
+        IncompatibleDatabaseError: If the database is not a compatible
+            versiref-search index
 
     """
     db_path = Path(db_path)
@@ -245,6 +254,7 @@ def get_context(
         raise FileNotFoundError(f"Database not found: {db_path}")
 
     with Database(db_path) as db:
+        db.validate_schema()
         blocks = []
 
         # Get heading context if requested

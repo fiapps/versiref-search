@@ -1,7 +1,7 @@
 """Search texts for Bible references with versiref."""
 
 from versiref.search.analyzer import analyze_abbreviations, analyze_documents
-from versiref.search.database import Database
+from versiref.search.database import Database, IncompatibleDatabaseError
 from versiref.search.indexer import (
     InvalidRefAction,
     find_unrecognized_abbreviations,
@@ -20,6 +20,7 @@ __all__ = [
     "AbbreviationAnalysis",
     "BlockInfo",
     "Database",
+    "IncompatibleDatabaseError",
     "InvalidRefAction",
     "SearchResult",
     "VersificationScore",
