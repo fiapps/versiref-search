@@ -174,6 +174,7 @@ When asked to make a release, Claude performs steps 1–7; publishing and pushin
 8. Manual: publish and push the commit and tag.
 
 Claude may run `uv build` to produce the artifacts, but does not publish or push.
+Before building, delete any artifacts from previous versions in `dist/` (e.g. `rm -f dist/*`), so the directory holds only the current release's files and a publish step that uploads `dist/*` cannot pick up stale builds.
 
 ## Markdown Style
 
