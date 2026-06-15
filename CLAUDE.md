@@ -169,6 +169,7 @@ When asked to make a release, Claude performs steps 1–7; publishing and pushin
 6. Make the release commit (subject line `Release X.Y.Z`).
 7. Create an annotated tag named with the bare version number (e.g., `0.5.0`, not `v0.5.0`).
    The tag annotation message is the new version's `CHANGELOG.md` section — its `### Added`/`### Changed`/`### Removed` subsection headings and their entries, but **without** the `## X.Y.Z` version heading line.
+   Tag with `git tag -a --cleanup=verbatim -F <file>`: the default cleanup strips lines beginning with `#`, which would silently drop the `###` subsection headings.
    GitHub renders this annotation as the release notes on the releases page.
 8. Manual: publish and push the commit and tag.
 
