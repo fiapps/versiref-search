@@ -184,7 +184,7 @@ When writing or editing Markdown documents (docs, README, etc.):
 
 ## Important Files
 
-- `docs/`: User-facing documentation (tracked in git)
+- `src/versiref/search/docs/`: User-facing documentation, bundled into the package as package data (tracked in git; exposed via the `docs` CLI subcommand)
 - `reference/design.md`: Comprehensive design document with full schema, workflows, and implementation phases
 - `reference/versiref/`: Documentation for the `versiref` dependency
 - `pyproject.toml`: Package configuration and dependencies
