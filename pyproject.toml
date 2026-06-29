@@ -1,6 +1,6 @@
 [project]
 name = "versiref-search"
-version = "0.5.0"
+version = "0.6.0"
 description = "Search texts for Bible references with versiref"
 readme = "README.md"
 authors = [
