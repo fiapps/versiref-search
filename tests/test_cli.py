@@ -355,12 +355,12 @@ def test_analyze_reports_all_abbreviations_recognized(tmp_path):
 
 def test_analyze_recommends_set_for_unrecognized_abbreviation(tmp_path):
     md = tmp_path / "doc.md"
-    md.write_text("He cites 1 Sam 3:4.\n", encoding="utf-8")
+    md.write_text("He cites 1Sa 3:4.\n", encoding="utf-8")
     runner = CliRunner()
     result = runner.invoke(main, ["analyze", str(md)])
     assert result.exit_code == 0
     assert "Additional book-name sets needed (en-*)" in result.output
-    assert "en-sbl_abbreviations" in result.output
+    assert "en-bibleworks" in result.output
 
 
 def test_analyze_lists_uncovered_abbreviation(tmp_path):

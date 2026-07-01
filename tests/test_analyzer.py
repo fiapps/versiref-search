@@ -129,22 +129,23 @@ def test_abbreviations_truly_unrecognized_lands_in_remaining(tmp_path, ref_style
 
 
 def test_abbreviations_unique_set_is_recommended(tmp_path, ref_style):
-    # "1 Sam" is in en-sbl_abbreviations but not in en-cmos_short.recognized_names.
-    md = _write(tmp_path, "doc.md", "He cites 1 Sam 3:4.\n")
+    # "Isaias" is the Douay-Rheims name for Isaiah, present in
+    # en-douay-rheims_names but not in en-cmos_short.recognized_names.
+    md = _write(tmp_path, "doc.md", "He cites Isaias 7:14.\n")
     result = analyze_abbreviations([md], ref_style)
-    assert "1 Sam" in result.unrecognized
-    assert result.needed_sets == ["en-sbl_abbreviations"]
+    assert "Isaias" in result.unrecognized
+    assert result.needed_sets == ["en-douay-rheims_names"]
     assert result.remaining == {}
 
 
 def test_abbreviations_greedy_picks_higher_coverage_first(tmp_path, ref_style):
-    # Both abbrevs ("1 Sam" and "1 Pet") live only in en-sbl_abbreviations
+    # Both names ("Isaias" and "Jeremias") live only in en-douay-rheims_names
     # among en-* sets — so a single set covers both. Verify the greedy step
     # picks one set rather than two.
-    md = _write(tmp_path, "doc.md", "He cites 1 Sam 3:4 and 1 Pet 5:8.\n")
+    md = _write(tmp_path, "doc.md", "He cites Isaias 7:14 and Jeremias 31:31.\n")
     result = analyze_abbreviations([md], ref_style)
-    assert {"1 Sam", "1 Pet"} <= set(result.unrecognized)
-    assert result.needed_sets == ["en-sbl_abbreviations"]
+    assert {"Isaias", "Jeremias"} <= set(result.unrecognized)
+    assert result.needed_sets == ["en-douay-rheims_names"]
 
 
 def test_abbreviations_language_prefix_scopes_candidates(tmp_path, ref_style):
@@ -171,12 +172,14 @@ def test_abbreviations_no_language_prefix_uses_all_sets(tmp_path):
 
 
 def test_abbreviations_pool_across_files(tmp_path, ref_style):
-    a = _write(tmp_path, "a.md", "He cites 1 Sam 3:4.\n")
+    # "1Sa" is a BibleWorks abbreviation; "1 Machabees" is a Douay-Rheims
+    # name — each lives in a different en-* set, so both are needed.
+    a = _write(tmp_path, "a.md", "He cites 1Sa 3:4.\n")
     b = _write(tmp_path, "b.md", "He cites 1 Machabees 1:10.\n")
     result = analyze_abbreviations([a, b], ref_style)
-    assert {"1 Sam", "1 Machabees"} <= set(result.unrecognized)
+    assert {"1Sa", "1 Machabees"} <= set(result.unrecognized)
     assert set(result.needed_sets) == {
-        "en-sbl_abbreviations",
+        "en-bibleworks",
         "en-douay-rheims_names",
     }
     assert result.remaining == {}
@@ -187,17 +190,17 @@ def test_abbreviations_whitelist_suppresses_names(tmp_path, ref_style):
     # `remaining` since no en-* standard-name set covers it. The whitelist
     # should drop it before greedy coverage so it appears nowhere in the
     # report and contributes nothing to `needed_sets`.
-    md = _write(tmp_path, "doc.md", "He cites PL 1:1 and 1 Sam 3:4.\n")
+    md = _write(tmp_path, "doc.md", "He cites PL 1:1 and 1Sa 3:4.\n")
     result = analyze_abbreviations([md], ref_style, abbreviation_whitelist=["PL"])
     assert "PL" not in result.unrecognized
     assert "PL" not in result.remaining
-    assert "1 Sam" in result.unrecognized
-    assert result.needed_sets == ["en-sbl_abbreviations"]
+    assert "1Sa" in result.unrecognized
+    assert result.needed_sets == ["en-bibleworks"]
 
 
 def test_abbreviations_whitelist_does_not_affect_unrelated(tmp_path, ref_style):
-    md = _write(tmp_path, "doc.md", "He cites 1 Sam 3:4.\n")
+    md = _write(tmp_path, "doc.md", "He cites 1Sa 3:4.\n")
     # Whitelisting something not in the input is a no-op.
     result = analyze_abbreviations([md], ref_style, abbreviation_whitelist=["PL"])
-    assert "1 Sam" in result.unrecognized
-    assert result.needed_sets == ["en-sbl_abbreviations"]
+    assert "1Sa" in result.unrecognized
+    assert result.needed_sets == ["en-bibleworks"]

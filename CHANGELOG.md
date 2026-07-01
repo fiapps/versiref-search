@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- References that carry a versification identifier (e.g. "Ps 50:1 Vulg." in a document otherwise cited in English versification) are now indexed at their correct location in the database's versification. Previously such a reference was stored under the raw verse numbering of its own versification, so searching for the equivalent verse in the database's scheme (Ps 51:1) would not find it.
+
+### Changed
+
+- Requires versiref >= 0.6.0, which recognizes trailing versification identifiers when scanning.
+
 ## 0.6.0 - 2026-06-29
 
 ### Added

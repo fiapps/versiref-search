@@ -219,6 +219,60 @@ class TestFindUnrecognizedAbbreviations:
         assert result == {}
 
 
+class TestCrossVersificationMapping:
+    """Foreign-versification references must be mapped before keying.
+
+    A reference tagged with a foreign versification identifier must be
+    mapped to the database's versification before its range keys are derived.
+    """
+
+    @staticmethod
+    def _vulg_style():
+        style = RefStyle.named("en-cmos_short")
+        style.also_recognize_versifications({"Vulg.": "vulgata"})
+        return style
+
+    def test_foreign_reference_stored_under_mapped_key(self, tmp_path):
+        """A Vulgate reference is stored under its mapped eng key.
+
+        'Ps 50:1 Vulg.' in an eng database must be stored under the eng key
+        for Ps 51:1 (19051001), not the raw vulgata key (18050001).
+        """
+        md = tmp_path / "test.md"
+        md.write_text("Compare Ps 50:1 Vulg. with the psalm.", encoding="utf-8")
+        db_path = tmp_path / "out.db"
+        index_document(
+            input_path=md,
+            output_path=db_path,
+            metadata={"title": "Test", "versification": "eng"},
+            ref_style=self._vulg_style(),
+        )
+        with Database(db_path) as db:
+            rows = db.conn.execute(
+                "SELECT verse_start, verse_end FROM reference_index"
+            ).fetchall()
+        keys = [(r["verse_start"], r["verse_end"]) for r in rows]
+        assert keys == [(19051001, 19051001)]
+
+    def test_native_reference_still_stored_natively(self, tmp_path):
+        """A reference without a foreign identifier keeps the db versification's keys."""
+        md = tmp_path / "test.md"
+        md.write_text("See Jn 3:16 here.", encoding="utf-8")
+        db_path = tmp_path / "out.db"
+        index_document(
+            input_path=md,
+            output_path=db_path,
+            metadata={"title": "Test", "versification": "eng"},
+            ref_style=self._vulg_style(),
+        )
+        with Database(db_path) as db:
+            rows = db.conn.execute(
+                "SELECT verse_start, verse_end FROM reference_index"
+            ).fetchall()
+        keys = [(r["verse_start"], r["verse_end"]) for r in rows]
+        assert keys == [(43003016, 43003016)]
+
+
 class TestIndexDocumentAbbreviationCheck:
     def test_check_abbreviations_false_suppresses(self, tmp_path, ref_style, caplog):
         md = tmp_path / "test.md"

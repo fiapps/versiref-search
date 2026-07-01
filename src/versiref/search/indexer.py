@@ -192,6 +192,26 @@ def index_document(
                             ref_text,
                         )
 
+                # The scanner may tag a reference with a foreign versification
+                # (e.g. "Ps 50:1 Vulg."). Map it into the database's scheme so
+                # range keys are derived in the database's versification.
+                if (
+                    ref.versification is not None
+                    and ref.versification.identifier != versification
+                ):
+                    mapped = ref.map_to(vers)
+                    if mapped is None:
+                        ref_text = block.text[start_pos:end_pos]
+                        logger.warning(
+                            'Reference "%s" in versification "%s" could not be '
+                            'mapped to "%s"; excluding.',
+                            ref_text,
+                            ref.versification.identifier,
+                            versification,
+                        )
+                        continue
+                    ref = mapped
+
                 # Convert reference to integer range keys
                 for verse_start, verse_end in ref.range_keys():
                     # Insert reference index entry
