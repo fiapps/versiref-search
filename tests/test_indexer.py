@@ -48,6 +48,43 @@ def test_creates_database_file(tmp_path, minimal_md, ref_style):
     assert db_path.exists()
 
 
+def test_reindex_replaces_by_default(tmp_path, minimal_md, ref_style):
+    db_path = tmp_path / "out.db"
+    meta = {"title": "Test", "versification": "eng"}
+    index_document(minimal_md, db_path, meta, ref_style)
+    first = get_index_stats(db_path)
+    # Re-indexing the same source must not accumulate duplicate blocks.
+    index_document(minimal_md, db_path, meta, ref_style)
+    second = get_index_stats(db_path)
+    assert second["block_count"] == first["block_count"]
+    assert second["reference_count"] == first["reference_count"]
+
+
+def test_append_accumulates(tmp_path, minimal_md, ref_style):
+    db_path = tmp_path / "out.db"
+    meta = {"title": "Test", "versification": "eng"}
+    index_document(minimal_md, db_path, meta, ref_style)
+    first = get_index_stats(db_path)
+    index_document(minimal_md, db_path, meta, ref_style, append=True)
+    second = get_index_stats(db_path)
+    assert second["block_count"] == 2 * first["block_count"]
+    assert second["reference_count"] == 2 * first["reference_count"]
+
+
+def test_failed_reindex_leaves_existing_db_intact(tmp_path, minimal_md, ref_style):
+    db_path = tmp_path / "out.db"
+    meta = {"title": "Test", "versification": "eng"}
+    index_document(minimal_md, db_path, meta, ref_style)
+    before = get_index_stats(db_path)
+    # A call that fails validation must not delete the good database.
+    with pytest.raises(ValueError):
+        index_document(
+            minimal_md, db_path, {"title": "Bad", "versification": "nope"}, ref_style
+        )
+    after = get_index_stats(db_path)
+    assert after["block_count"] == before["block_count"]
+
+
 def test_block_count(indexed_db):
     stats = get_index_stats(indexed_db)
     # minimal_md: h1, paragraph(Lk 1:28), h2, paragraph(Ps 45:10), paragraph = 5

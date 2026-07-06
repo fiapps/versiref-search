@@ -85,6 +85,7 @@ def index_document(
     invalid_references: InvalidRefAction = "warn",
     check_abbreviations: bool = True,
     abbreviation_whitelist: list[str] | None = None,
+    append: bool = False,
 ) -> None:
     """Index a Markdown document into a SQLite database.
 
@@ -102,6 +103,10 @@ def index_document(
             the versification are always excluded.
         check_abbreviations: If True, warn about unrecognized abbreviations
         abbreviation_whitelist: Abbreviations to exclude from the check
+        append: If False (default), any existing database at output_path is
+            replaced so the result reflects only this document. If True, the
+            document's blocks and references are added to the existing
+            database (used to combine several documents into one index).
 
     Raises:
         FileNotFoundError: If input file doesn't exist
@@ -141,6 +146,13 @@ def index_document(
 
     # Parse Markdown into blocks
     blocks = parse_markdown(markdown_text)
+
+    # Replace any existing database unless appending, so a rebuild reflects
+    # only the current source rather than accumulating duplicate blocks.
+    # Done after all validation/parsing so a failed call leaves the old
+    # database untouched.
+    if not append and output_path.exists():
+        output_path.unlink()
 
     # Create database and populate it
     with Database(output_path) as db:

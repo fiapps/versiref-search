@@ -120,9 +120,10 @@ def index(
     """Index one or more Markdown documents into a searchable database.
 
     Creates a SQLite database with indexed Bible references and content blocks
-    from INPUT_FILES. Each file is indexed separately and appended to the
-    database in order. Metadata is read from a YAML file specified with -m or
-    from a config file specified with -c.
+    from INPUT_FILES. Any existing database at the output path is replaced;
+    when several INPUT_FILES are given they are indexed in order into one
+    database. Metadata is read from a YAML file specified with -m or from a
+    config file specified with -c.
     """
     try:
         config: dict = {}
@@ -181,7 +182,10 @@ def index(
                 f"Valid values: warn, exclude, ignore"
             )
 
-        for input_file in input_files:
+        # Rebuild from scratch: an existing database at the output path is
+        # replaced, not added to. The first file replaces it; later files in
+        # the same invocation accumulate into this fresh database.
+        for position, input_file in enumerate(input_files):
             click.echo(f"Indexing {input_file}...")
             index_document(
                 input_path=input_file,
@@ -192,6 +196,7 @@ def index(
                 invalid_references=invalid_references,
                 check_abbreviations=not skip_abbreviations_check,
                 abbreviation_whitelist=whitelist_list,
+                append=position > 0,
             )
 
         # Get and display stats

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- Indexing to an output path that already holds a database now rebuilds it from scratch instead of adding a second copy of every block. Repeatedly re-indexing the same source (for example, while checking a fix) no longer inflates the block and reference counts or produces duplicate search hits. Indexing several input files in one `index` command still combines them into a single database as before.
+
 ## 0.6.1 - 2026-06-30
 
 ### Fixed
