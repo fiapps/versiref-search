@@ -3,6 +3,9 @@
 This document covers creating versiref-search databases from Markdown source documents.
 If you only need to search existing databases, see [searching.md](searching.md).
 
+> Reference styles, versification schemes, and book-name sets all come from the underlying `versiref` package.
+> It ships its own documentation — run `versiref docs` to print the path to it — and offers `versiref list versifications` and `versiref list book-names` to see what is available by name.
+
 ## Quick Start
 
 Index a Markdown file into a searchable database:
@@ -74,7 +77,7 @@ The marker only appears when a config file is supplied.
 To act on the report:
 
 - Add the recommended sets to your inline `style:` config block via `also_recognize`, or pick a `--style` whose recognized names already include them.
-- Set the top-ranked versification as the `versification` value in your metadata or config.
+- Set the top-ranked versification as the `versification` value in your config file (or, if you index without one, in the metadata file).
 - Add genuinely-non-Bible abbreviations (e.g., `PL` for *Patrologia Latina*) to `abbreviations_whitelist` so the indexer's abbreviation check stops flagging them.
 
 You can pass the same config file you use for indexing with `-c`/`--config`.
@@ -99,14 +102,14 @@ versiref-search analyze [OPTIONS] INPUT_FILES...
 ## Metadata File
 
 Every database requires metadata.
-At minimum, the metadata must include `title` and `versification`.
+The metadata file describes the *work* — title, author, and the like — not how it is indexed.
+Keeping indexing parameters out of it means the same metadata file can feed other outputs built from the same source (for example, a Verbum Personal Book).
 The file is YAML, optionally wrapped in front-matter delimiters (`---`):
 
 ```yaml
 ---
 title: Commentary on Romans
 author: J. Smith
-versification: eng
 lang: en-US
 ---
 ```
@@ -119,9 +122,11 @@ List values are joined with " and " (e.g., multiple authors).
 | Key | Description |
 |-----|-------------|
 | `title` | Title of the work |
-| `versification` | Versification scheme (e.g., `eng`, `lxx`, `Vulgata`) |
 
-The `versification` key can alternatively be set in the config file, which takes precedence over the metadata file.
+A `versification` is also required, but it is an indexing parameter rather than bibliographic metadata.
+When you index with a config file, set it there (see [Config File](#config-file)) and leave it out of the metadata file, so the metadata stays reusable.
+Put `versification` in the metadata file only when you index without a config file.
+Do not set it in both places.
 
 ### Common Optional Keys
 
@@ -144,7 +149,7 @@ Here is a full example with all supported keys:
 # Path to metadata file (resolved relative to config file location)
 metadata: metadata.yaml
 
-# Versification scheme (overrides the one in metadata)
+# Versification scheme for indexing (its preferred home; see Metadata File)
 versification: eng
 
 # Reference style: a named style or an inline definition
@@ -176,7 +181,9 @@ Can be overridden by the CLI `--metadata` option.
 #### `versification`
 
 Versification scheme name (e.g., `eng`, `lxx`, `Vulgata`).
-When present, this overrides the `versification` key in the metadata file.
+This is the preferred place to set the versification, since it is an indexing parameter rather than bibliographic metadata.
+If it is also present in the metadata file, the config value wins.
+Run `versiref list versifications` to see the available schemes.
 
 #### `style`
 
@@ -187,6 +194,8 @@ Can be either:
   The default is `en-cmos_short`.
 - An **inline style definition** as a YAML mapping with `names`, `chapter_verse_separator`, and optionally `also_recognize`.
   This is useful for texts that use non-standard abbreviations.
+
+Run `versiref list book-names` to see the bundled book-name sets you can draw on for `names` and `also_recognize`.
 
 Inline style example:
 
