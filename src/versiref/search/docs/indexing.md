@@ -111,6 +111,7 @@ The file is YAML, optionally wrapped in front-matter delimiters (`---`):
 title: Commentary on Romans
 author: J. Smith
 lang: en-US
+description: Verse-by-verse commentary on Romans; passages are numbered and cross-referenced by the doctrinal index.
 ---
 ```
 
@@ -138,6 +139,12 @@ These are not enforced but are conventional:
 | `translator` | Translator(s) |
 | `date` | Publication date |
 | `lang` | Language code (e.g., `en-US`) |
+| `description` | Free-text summary of what the database contains and when to search it |
+
+A `description` is worth adding whenever the `title` alone does not tell a reader — human or LLM — what the database holds or when to reach for it.
+Use it to summarize the work's subject and scope, to signal the kinds of questions the database can answer, and to flag anything special that a searcher needs to know about the contents.
+For example, note that the text uses numbered passages referenced by a doctrinal index, or that coverage is limited to certain books.
+An agent choosing among several databases can read these descriptions to decide which one to search.
 
 ## Config File
 
