@@ -1,12 +1,65 @@
 """Markdown parsing for versiref-search."""
 
+import re
 from typing import Any
 import mistune
-from .models import BlockInfo
+from .models import BlockInfo, RawMilestone
+
+# Milestone markers: HTML comments of the form <!-- page: 204 --> or
+# <!-- scope: John 7:53-8:11 -->. Other HTML comments are left untouched.
+MILESTONE_RE = re.compile(r"<!--\s*(page|scope)\s*:\s*(.*?)\s*-->")
+
+
+def extract_milestones(text: str) -> tuple[str, list[RawMilestone]]:
+    """Extract milestone comments from block text and strip them.
+
+    Each recognized milestone comment is removed from the text and recorded
+    with its character offset in the *stripped* text. When removing an inline
+    comment leaves a doubled space, one space is collapsed so the stored text
+    reads naturally (and FTS phrase matching and reference scanning are not
+    broken by the marker).
+
+    Args:
+        text: Block text possibly containing milestone comments
+
+    Returns:
+        Tuple of (stripped_text, milestones)
+
+    """
+    milestones: list[RawMilestone] = []
+    parts: list[str] = []
+    out_len = 0  # length of stripped text built so far
+    pos = 0
+    for match in MILESTONE_RE.finditer(text):
+        before = text[pos : match.start()]
+        pos = match.end()
+        if before.endswith((" ", "\t")):
+            if pos < len(text) and text[pos] in " \t":
+                # Collapse "word <!--...--> word" to a single space between
+                # words, skipping the space after the comment so the offset
+                # points at the first character following the marker.
+                pos += 1
+            elif pos >= len(text) or text[pos] == "\n":
+                # Drop the space left dangling before a comment that ends
+                # the text or a line.
+                before = before[:-1]
+        parts.append(before)
+        out_len += len(before)
+        milestones.append(
+            RawMilestone(type=match.group(1), value=match.group(2), offset=out_len)
+        )
+    parts.append(text[pos:])
+    return "".join(parts), milestones
 
 
 def parse_markdown(markdown_text: str) -> list[BlockInfo]:
     """Parse Markdown text into block-level elements.
+
+    Milestone comments (``<!-- page: ... -->``, ``<!-- scope: ... -->``) are
+    stripped from block text and attached to the block as
+    :class:`RawMilestone` entries. A block consisting only of milestone
+    comments is dropped; its milestones attach to the next block at offset 0
+    (or to the end of the last block if nothing follows).
 
     Args:
         markdown_text: Raw Markdown text to parse
@@ -21,15 +74,41 @@ def parse_markdown(markdown_text: str) -> list[BlockInfo]:
 
     blocks = []
     block_id = 0  # We use 0-based IDs here; database will assign real IDs
+    pending: list[RawMilestone] = []  # milestones awaiting their host block
 
     # Walk the AST and extract block-level elements
     for token in tokens:
         block_text, heading_level = _extract_block(token, markdown_text)
-        if block_text:
-            blocks.append(
-                BlockInfo(id=block_id, text=block_text, heading_level=heading_level)
+        if not block_text:
+            continue
+        stripped, milestones = extract_milestones(block_text)
+        if not stripped.strip():
+            # Block was only milestone comments; attach them to the next block.
+            pending.extend(
+                RawMilestone(type=m.type, value=m.value, offset=0) for m in milestones
             )
-            block_id += 1
+            continue
+        if pending:
+            milestones = pending + milestones
+            pending = []
+        blocks.append(
+            BlockInfo(
+                id=block_id,
+                text=stripped,
+                heading_level=heading_level,
+                milestones=milestones,
+            )
+        )
+        block_id += 1
+
+    # Trailing milestones with no following block: attach to the last block
+    # at its end.
+    if pending and blocks:
+        last = blocks[-1]
+        last.milestones.extend(
+            RawMilestone(type=m.type, value=m.value, offset=len(last.text))
+            for m in pending
+        )
 
     return blocks
 

@@ -11,6 +11,8 @@ from versiref.search.indexer import (
 from versiref.search.models import (
     AbbreviationAnalysis,
     BlockInfo,
+    RawMilestone,
+    ScopeResult,
     SearchResult,
     VersificationScore,
 )
@@ -18,9 +20,11 @@ from versiref.search.searcher import (
     AmbiguousSectionError,
     SectionTooLargeError,
     get_context,
+    get_page_context,
     get_section_by_block,
     get_section_by_heading,
     get_toc,
+    search_commentary,
     search_database,
 )
 
@@ -31,6 +35,8 @@ __all__ = [
     "Database",
     "IncompatibleDatabaseError",
     "InvalidRefAction",
+    "RawMilestone",
+    "ScopeResult",
     "SearchResult",
     "SectionTooLargeError",
     "VersificationScore",
@@ -39,9 +45,11 @@ __all__ = [
     "find_unrecognized_abbreviations",
     "get_context",
     "get_index_stats",
+    "get_page_context",
     "get_section_by_block",
     "get_section_by_heading",
     "get_toc",
     "index_document",
+    "search_commentary",
     "search_database",
 ]

@@ -13,7 +13,13 @@ PRODUCT_NAME = "versiref-search"
 # Minor bumps are additive (new tables/columns); a major bump signals a
 # breaking change. Code requiring X.Y accepts any database whose major equals
 # X and whose minor is >= Y.
-SCHEMA_VERSION = "1.0"
+#
+# SCHEMA_VERSION is what new databases are stamped with at index time;
+# REQUIRED_SCHEMA_VERSION is the oldest schema this code can read. They
+# differ when new tables are optional at query time (queries against the
+# new tables return empty results on older databases).
+SCHEMA_VERSION = "1.1"
+REQUIRED_SCHEMA_VERSION = "1.0"
 
 
 class IncompatibleDatabaseError(Exception):
@@ -76,6 +82,33 @@ CREATE TABLE IF NOT EXISTS reference_index (
 
 CREATE INDEX IF NOT EXISTS idx_verse_range ON reference_index(verse_start, verse_end);
 CREATE INDEX IF NOT EXISTS idx_content_id ON reference_index(content_id);
+
+-- Milestones: point markers in the text (page breaks, other locators).
+-- Stripped from block_text at index time; char_offset is where the marker
+-- fell in the stored (stripped) text.
+CREATE TABLE IF NOT EXISTS milestone (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,            -- e.g. 'page'
+    value TEXT NOT NULL,           -- e.g. '204', 'xvii'
+    content_id INTEGER NOT NULL,
+    char_offset INTEGER NOT NULL,  -- position in block_text
+    FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_milestone_lookup ON milestone(type, value);
+CREATE INDEX IF NOT EXISTS idx_milestone_position ON milestone(type, content_id, char_offset);
+
+-- Commentary scopes: which Scripture passage a span of blocks comments on
+-- (as opposed to cites). Block ranges are inclusive and may nest or overlap.
+CREATE TABLE IF NOT EXISTS commentary_scope (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    block_start INTEGER NOT NULL,  -- first content id of the commented span
+    block_end INTEGER NOT NULL,    -- last content id (inclusive)
+    verse_start INTEGER NOT NULL,  -- 8-digit: BBCCCVVV
+    verse_end INTEGER NOT NULL     -- 8-digit: BBCCCVVV
+);
+
+CREATE INDEX IF NOT EXISTS idx_scope_verse ON commentary_scope(verse_start, verse_end);
 
 -- Key-value metadata
 CREATE TABLE IF NOT EXISTS metadata (
@@ -181,8 +214,8 @@ class Database:
         versiref-ecosystem database is rejected cleanly rather than failing
         later on a missing table), then the schema version using the additive
         rule: the database's major version must equal this code's major
-        version, and its minor version must be >= this code's minor version
-        (:data:`SCHEMA_VERSION`).
+        version, and its minor version must be >= this code's minimum minor
+        version (:data:`REQUIRED_SCHEMA_VERSION`).
 
         Raises:
             IncompatibleDatabaseError: If the database lacks the product
@@ -213,11 +246,11 @@ class Database:
                 f"{self.db_path}: unparseable schema_version '{version}': {e}"
             )
 
-        req_major, req_minor = _parse_schema_version(SCHEMA_VERSION)
+        req_major, req_minor = _parse_schema_version(REQUIRED_SCHEMA_VERSION)
         if db_major != req_major or db_minor < req_minor:
             raise IncompatibleDatabaseError(
                 f"{self.db_path}: schema version {version} is incompatible with "
-                f"this code (requires {SCHEMA_VERSION})"
+                f"this code (requires {REQUIRED_SCHEMA_VERSION})"
             )
 
     def insert_content(self, block_text: str, heading_level: int | None = None) -> int:
@@ -275,6 +308,211 @@ class Database:
         self.conn.commit()
         assert cursor.lastrowid is not None
         return cursor.lastrowid
+
+    def _table_exists(self, name: str) -> bool:
+        """Return True if a table exists in this database.
+
+        Used to degrade gracefully on databases created before a table was
+        added to the schema (schema 1.0 lacks milestone/commentary_scope).
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+
+        cursor = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+        )
+        return cursor.fetchone() is not None
+
+    def insert_milestone(
+        self, type: str, value: str, content_id: int, char_offset: int
+    ) -> int:
+        """Insert a milestone marker.
+
+        Args:
+            type: Milestone type (e.g., "page")
+            value: Milestone value (e.g., "204", "xvii")
+            content_id: ID of content block the milestone falls in
+            char_offset: Character position in block_text where it falls
+
+        Returns:
+            ID of inserted milestone
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+
+        cursor = self.conn.execute(
+            """INSERT INTO milestone (type, value, content_id, char_offset)
+               VALUES (?, ?, ?, ?)""",
+            (type, value, content_id, char_offset),
+        )
+        self.conn.commit()
+        assert cursor.lastrowid is not None
+        return cursor.lastrowid
+
+    def get_page_for_block(self, content_id: int, char_offset: int = 0) -> str | None:
+        """Get the page in effect at a position, if page milestones exist.
+
+        Returns the value of the latest "page" milestone at or before the
+        given position. With sparse page milestones this is the most recent
+        *recorded* page, which may precede the actual page.
+
+        Args:
+            content_id: Content block ID
+            char_offset: Character position within the block (default: block
+                start, which still counts milestones recorded at offset 0)
+
+        Returns:
+            Page value, or None if no page milestone precedes the position
+            (including databases without a milestone table).
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("milestone"):
+            return None
+
+        cursor = self.conn.execute(
+            """SELECT value FROM milestone
+               WHERE type = 'page'
+                 AND (content_id < ? OR (content_id = ? AND char_offset <= ?))
+               ORDER BY content_id DESC, char_offset DESC
+               LIMIT 1""",
+            (content_id, content_id, char_offset),
+        )
+        row = cursor.fetchone()
+        return row["value"] if row else None
+
+    def get_page_range(self, value: str) -> tuple[int, int] | None:
+        """Get the content-block span covered by a page.
+
+        The span runs from the block holding the page's milestone through the
+        block holding the next page milestone (inclusive, since a page break
+        can fall mid-block), or through the last block if it is the last page.
+
+        Args:
+            value: Page value to look up (exact match)
+
+        Returns:
+            Tuple of (start_id, end_id), or None if no such page milestone
+            (including databases without a milestone table).
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("milestone"):
+            return None
+
+        cursor = self.conn.execute(
+            """SELECT content_id, char_offset FROM milestone
+               WHERE type = 'page' AND value = ?
+               ORDER BY content_id, char_offset
+               LIMIT 1""",
+            (value,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        start_id, start_offset = row["content_id"], row["char_offset"]
+
+        cursor = self.conn.execute(
+            """SELECT content_id FROM milestone
+               WHERE type = 'page'
+                 AND (content_id > ? OR (content_id = ? AND char_offset > ?))
+               ORDER BY content_id, char_offset
+               LIMIT 1""",
+            (start_id, start_id, start_offset),
+        )
+        row = cursor.fetchone()
+        if row is not None:
+            return start_id, row["content_id"]
+
+        max_id = self.get_max_content_id()
+        assert max_id is not None  # a milestone implies at least one block
+        return start_id, max_id
+
+    def get_page_values(self) -> list[str]:
+        """Get all page milestone values in document order.
+
+        Returns an empty list on databases without a milestone table.
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("milestone"):
+            return []
+
+        cursor = self.conn.execute(
+            """SELECT value FROM milestone
+               WHERE type = 'page'
+               ORDER BY content_id, char_offset"""
+        )
+        return [row["value"] for row in cursor.fetchall()]
+
+    def insert_scope(
+        self, block_start: int, block_end: int, verse_start: int, verse_end: int
+    ) -> int:
+        """Insert a commentary scope entry.
+
+        Args:
+            block_start: First content ID of the commented span
+            block_end: Last content ID of the commented span (inclusive)
+            verse_start: Start verse (8-digit integer: BBCCCVVV)
+            verse_end: End verse (8-digit integer: BBCCCVVV)
+
+        Returns:
+            ID of inserted scope entry
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+
+        cursor = self.conn.execute(
+            """INSERT INTO commentary_scope
+               (block_start, block_end, verse_start, verse_end)
+               VALUES (?, ?, ?, ?)""",
+            (block_start, block_end, verse_start, verse_end),
+        )
+        self.conn.commit()
+        assert cursor.lastrowid is not None
+        return cursor.lastrowid
+
+    def search_scopes(
+        self, query_start: int, query_end: int
+    ) -> list[tuple[int, int, int, int, int]]:
+        """Search for commentary scopes whose verse range overlaps the query range.
+
+        Args:
+            query_start: Start of query range (8-digit integer)
+            query_end: End of query range (8-digit integer)
+
+        Returns:
+            List of tuples: (id, block_start, block_end, verse_start,
+            verse_end), ordered by block_start then block_end. Empty on
+            databases without a commentary_scope table.
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("commentary_scope"):
+            return []
+
+        cursor = self.conn.execute(
+            """SELECT id, block_start, block_end, verse_start, verse_end
+               FROM commentary_scope
+               WHERE verse_start <= ? AND verse_end >= ?
+               ORDER BY block_start, block_end""",
+            (query_end, query_start),
+        )
+        return [
+            (
+                row["id"],
+                row["block_start"],
+                row["block_end"],
+                row["verse_start"],
+                row["verse_end"],
+            )
+            for row in cursor.fetchall()
+        ]
 
     def search_by_reference_range(
         self,
@@ -634,3 +872,23 @@ class Database:
         cursor = self.conn.execute("SELECT COUNT(*) as count FROM reference_index")
         row = cursor.fetchone()
         return row["count"]
+
+    def count_milestones(self) -> int:
+        """Count milestone entries (0 on databases without the table)."""
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("milestone"):
+            return 0
+
+        cursor = self.conn.execute("SELECT COUNT(*) as count FROM milestone")
+        return cursor.fetchone()["count"]
+
+    def count_scopes(self) -> int:
+        """Count commentary scope entries (0 on databases without the table)."""
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("commentary_scope"):
+            return 0
+
+        cursor = self.conn.execute("SELECT COUNT(*) as count FROM commentary_scope")
+        return cursor.fetchone()["count"]

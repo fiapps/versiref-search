@@ -16,9 +16,11 @@ from .searcher import (
     DEFAULT_MAX_SECTION_BLOCKS,
     SectionTooLargeError,
     get_context,
+    get_page_context,
     get_section_by_block,
     get_section_by_heading,
     get_toc,
+    search_commentary,
     search_database,
 )
 
@@ -182,6 +184,9 @@ def index(
                 f"Valid values: warn, exclude, ignore"
             )
 
+        # Resolve commentary_headings from config
+        commentary_headings = bool(config.get("commentary_headings", False))
+
         # Rebuild from scratch: an existing database at the output path is
         # replaced, not added to. The first file replaces it; later files in
         # the same invocation accumulate into this fresh database.
@@ -197,6 +202,7 @@ def index(
                 check_abbreviations=not skip_abbreviations_check,
                 abbreviation_whitelist=whitelist_list,
                 append=position > 0,
+                commentary_headings=commentary_headings,
             )
 
         # Get and display stats
@@ -204,6 +210,10 @@ def index(
         click.echo(f"✓ Successfully indexed to {output_file}")
         click.echo(f"  Blocks: {stats['block_count']}")
         click.echo(f"  References: {stats['reference_count']}")
+        if stats["milestone_count"]:
+            click.echo(f"  Milestones: {stats['milestone_count']}")
+        if stats["scope_count"]:
+            click.echo(f"  Commentary scopes: {stats['scope_count']}")
         click.echo(f"  Title: {stats['metadata'].get('title', 'N/A')}")
 
     except click.UsageError:
@@ -282,6 +292,13 @@ def _output_search_xml(
 )
 @click.option("-s", "--string", help="Text string to search for (case-insensitive)")
 @click.option(
+    "-C",
+    "--commentary",
+    is_flag=True,
+    help="Find commentary on the passage (--reference matches commentary "
+    "scopes instead of citations)",
+)
+@click.option(
     "--no-headings", is_flag=True, help="Do not include heading context in results"
 )
 @click.option(
@@ -321,6 +338,7 @@ def search(
     databases: tuple[Path, ...],
     reference: str | None,
     string: str | None,
+    commentary: bool,
     no_headings: bool,
     style: str,
     versification: str,
@@ -333,12 +351,29 @@ def search(
 
     At least one of --reference or --string must be provided.
     Results are returned in document order with heading context.
+
+    With --commentary, --reference finds sections recorded as commenting on
+    the passage (rather than citing it); each result names its block range
+    for retrieval with the show command.
     """
     if not reference and not string:
         click.echo(
             "Error: At least one of --reference or --string must be provided", err=True
         )
         sys.exit(1)
+
+    if commentary:
+        if not reference:
+            click.echo("Error: --commentary requires --reference", err=True)
+            sys.exit(1)
+        if string:
+            click.echo("Error: --commentary cannot be combined with --string", err=True)
+            sys.exit(1)
+        if start_id is not None or end_id is not None:
+            click.echo(
+                "Error: --commentary cannot be combined with --start/--end", err=True
+            )
+            sys.exit(1)
 
     if start_id is not None and end_id is not None and start_id > end_id:
         click.echo("Error: --start must not exceed --end", err=True)
@@ -350,16 +385,27 @@ def search(
 
         all_db_results: list[tuple[Path, list]] = []
         for database in databases:
-            results = search_database(
-                db_path=database,
-                ref_style=ref_style,
-                reference_query=reference,
-                string_query=string,
-                include_headings=not no_headings,
-                query_versification=None if native else versification,
-                start_id=start_id,
-                end_id=end_id,
-            )
+            results: list
+            if commentary:
+                assert reference is not None
+                results = search_commentary(
+                    db_path=database,
+                    ref_style=ref_style,
+                    reference_query=reference,
+                    include_headings=not no_headings,
+                    query_versification=None if native else versification,
+                )
+            else:
+                results = search_database(
+                    db_path=database,
+                    ref_style=ref_style,
+                    reference_query=reference,
+                    string_query=string,
+                    include_headings=not no_headings,
+                    query_versification=None if native else versification,
+                    start_id=start_id,
+                    end_id=end_id,
+                )
             total_count += len(results)
             all_db_results.append((database, results))
 
@@ -399,6 +445,10 @@ def info(databases: tuple[Path, ...]) -> None:
                 click.echo(f"  {key}: {value}")
             click.echo(f"  blocks: {stats['block_count']}")
             click.echo(f"  references: {stats['reference_count']}")
+            if stats["milestone_count"]:
+                click.echo(f"  milestones: {stats['milestone_count']}")
+            if stats["scope_count"]:
+                click.echo(f"  commentary scopes: {stats['scope_count']}")
     except FileNotFoundError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -459,6 +509,12 @@ def docs(name: str | None) -> None:
     help="Select a section by matching its heading text (use with --section)",
 )
 @click.option(
+    "--page",
+    "page_value",
+    default=None,
+    help="Retrieve the blocks of a printed page (requires page milestones)",
+)
+@click.option(
     "--max-blocks",
     type=int,
     default=DEFAULT_MAX_SECTION_BLOCKS,
@@ -476,22 +532,38 @@ def show(
     end: int | None,
     section_level: int | None,
     heading_text: str | None,
+    page_value: str | None,
     max_blocks: int,
     include_headings: bool,
 ) -> None:
     r"""Retrieve content blocks from a database.
 
-    Three modes:
+    Four modes:
 
     \b
       Range:           --start S --end E
       Section by block: --start S --section L  (add --end to span sections)
       Section by text:  --heading TEXT --section L
+      Page:            --page VALUE
 
     Blocks are returned in document order.
     """
     try:
-        if section_level is not None:
+        if page_value is not None:
+            if any(
+                option is not None
+                for option in (start, end, section_level, heading_text)
+            ):
+                raise click.UsageError(
+                    "--page cannot be combined with --start/--end/--section/--heading"
+                )
+            blocks = get_page_context(
+                db_path=database,
+                page=page_value,
+                include_headings=include_headings,
+                max_blocks=max_blocks,
+            )
+        elif section_level is not None:
             if heading_text is not None:
                 if start is not None or end is not None:
                     raise click.UsageError(

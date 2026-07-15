@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Page milestones: mark page breaks in the source with `<!-- page: 204 -->` comments (inline or between paragraphs). The markers are stripped from the stored text and indexed separately, so they never disturb search or display. Search results then report the page of each hit (`[Block 42, page 204]`, `page="204"` in XML), and `show --page 204` retrieves the blocks of a printed page. Page numbers may be recorded sparsely; hits then report the most recent recorded page, and looking up an unrecorded page names the recorded pages around it (multi-part values like `2:84` compare part by part, and Roman-numeral front matter sorts before Arabic-numbered pages).
+- Commentary scopes: databases can now record which passage a section comments on, as distinct from the passages it cites. `search --commentary -r "John 8:7"` finds the sections commenting on a passage and reports each section's block range for retrieval with `show`. When sections nest, the most specific one is returned, with the enclosing sections visible as heading context. Scopes come from headings that contain a reference (enable with `commentary_headings: true` in the indexing config — for works that are actually commentaries) or from explicit `<!-- scope: John 7:53-8:11 -->` … `<!-- scope: end -->` markers, which also cover works that comment passages out of canonical order.
+- `info` and the `index` summary report milestone and commentary-scope counts when present.
+
+### Changed
+
+- Database schema version is now 1.1 (new `milestone` and `commentary_scope` tables). Existing 1.0 databases remain fully searchable — they simply have no pages or scopes until re-indexed.
+
 ## 0.6.3 - 2026-07-15
 
 ### Changed

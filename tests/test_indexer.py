@@ -337,3 +337,180 @@ class TestIndexDocumentAbbreviationCheck:
                 ref_style=ref_style,
             )
         assert 'Unrecognized abbreviation "PL"' in caplog.text
+
+
+# --- Milestones and commentary scopes ---
+
+PAGED_MD = """\
+# Chapter One
+
+First paragraph citing Lk 1:28. <!-- page: 12 --> Text on page twelve.
+
+<!-- page: 13 -->
+
+Paragraph on page thirteen citing Ps 45:10.
+"""
+
+COMMENTARY_MD = """\
+# Commentary
+
+Introduction without references.
+
+## The Pericope Adulterae (Jn 7:53-8:11)
+
+Introductory comments on the pericope.
+
+### On Jn 8:7
+
+Comment about the sinless one casting the first stone.
+
+### On Jn 8:11
+
+Comment about neither do I condemn you.
+
+## The Light of the World (Jn 8:12)
+
+Comment on the light of the world.
+"""
+
+
+@pytest.fixture
+def paged_db(tmp_path, ref_style):
+    md = tmp_path / "paged.md"
+    md.write_text(PAGED_MD, encoding="utf-8")
+    db_path = tmp_path / "paged.db"
+    index_document(
+        input_path=md,
+        output_path=db_path,
+        metadata={"title": "Paged", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    return db_path
+
+
+@pytest.fixture
+def commentary_db(tmp_path, ref_style):
+    md = tmp_path / "commentary.md"
+    md.write_text(COMMENTARY_MD, encoding="utf-8")
+    db_path = tmp_path / "commentary.db"
+    index_document(
+        input_path=md,
+        output_path=db_path,
+        metadata={"title": "Commentary", "versification": "eng"},
+        ref_style=ref_style,
+        commentary_headings=True,
+    )
+    return db_path
+
+
+def test_page_milestones_indexed(paged_db):
+    stats = get_index_stats(paged_db)
+    assert stats["milestone_count"] == 2
+    with Database(paged_db) as db:
+        # Block 2 holds the inline page-12 break; block 3 starts page 13.
+        assert db.get_page_for_block(1) is None
+        assert db.get_page_for_block(3) == "13"
+        assert db.get_page_range("12") == (2, 3)
+
+
+def test_page_markers_stripped_from_content(paged_db):
+    with Database(paged_db) as db:
+        _, text, _ = db.get_content_by_id(2)
+        assert "<!--" not in text
+        assert "page" not in text.lower() or "page twelve" in text
+
+
+def test_heading_scopes_derived(commentary_db):
+    stats = get_index_stats(commentary_db)
+    assert stats["scope_count"] == 4
+    with Database(commentary_db) as db:
+        # Blocks: 1 h1, 2 intro, 3 h2 pericope, 4 para, 5 h3 (8:7), 6 para,
+        # 7 h3 (8:11), 8 para, 9 h2 (8:12), 10 para.
+        scopes = {
+            (bs, be, vs, ve) for _, bs, be, vs, ve in db.search_scopes(0, 99999999)
+        }
+        assert (3, 8, 43007053, 43008011) in scopes  # pericope section
+        assert (5, 6, 43008007, 43008007) in scopes  # per-verse section
+        assert (7, 8, 43008011, 43008011) in scopes  # per-verse section
+        assert (9, 10, 43008012, 43008012) in scopes  # sibling section to end
+
+
+def test_heading_scopes_off_by_default(tmp_path, ref_style):
+    md = tmp_path / "commentary.md"
+    md.write_text(COMMENTARY_MD, encoding="utf-8")
+    db_path = tmp_path / "plain.db"
+    index_document(
+        input_path=md,
+        output_path=db_path,
+        metadata={"title": "Commentary", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    assert get_index_stats(db_path)["scope_count"] == 0
+
+
+EXPLICIT_SCOPE_MD = """\
+# Appendix
+
+<!-- scope: Jn 7:53-8:11 -->
+
+Out-of-order commentary on the pericope, first paragraph.
+
+Second paragraph.
+
+<!-- scope: end -->
+
+Unrelated closing paragraph.
+"""
+
+
+def test_explicit_scope_markers(tmp_path, ref_style):
+    md = tmp_path / "appendix.md"
+    md.write_text(EXPLICIT_SCOPE_MD, encoding="utf-8")
+    db_path = tmp_path / "appendix.db"
+    index_document(
+        input_path=md,
+        output_path=db_path,
+        metadata={"title": "Appendix", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    with Database(db_path) as db:
+        scopes = [
+            (bs, be, vs, ve) for _, bs, be, vs, ve in db.search_scopes(0, 99999999)
+        ]
+        # Blocks: 1 h1, 2-3 commentary paragraphs, 4 closing paragraph.
+        assert scopes == [(2, 3, 43007053, 43008011)]
+
+
+def test_explicit_scope_open_at_document_end(tmp_path, ref_style):
+    md = tmp_path / "openend.md"
+    md.write_text(
+        "First paragraph.\n\n<!-- scope: Jn 8:7 -->\n\nCommentary paragraph.\n",
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "openend.db"
+    index_document(
+        input_path=md,
+        output_path=db_path,
+        metadata={"title": "Open", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    with Database(db_path) as db:
+        scopes = [(bs, be) for _, bs, be, _, _ in db.search_scopes(0, 99999999)]
+        assert scopes == [(2, 2)]
+
+
+def test_invalid_scope_reference_warns_and_skips(tmp_path, ref_style, caplog):
+    md = tmp_path / "bad.md"
+    md.write_text(
+        "<!-- scope: Not A Ref 99 -->\n\nA paragraph with Lk 1:28.\n", encoding="utf-8"
+    )
+    db_path = tmp_path / "bad.db"
+    with caplog.at_level(logging.WARNING):
+        index_document(
+            input_path=md,
+            output_path=db_path,
+            metadata={"title": "Bad", "versification": "eng"},
+            ref_style=ref_style,
+        )
+    assert any("could not be parsed" in r.message for r in caplog.records)
+    assert get_index_stats(db_path)["scope_count"] == 0

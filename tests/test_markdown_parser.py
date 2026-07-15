@@ -1,6 +1,7 @@
 """Tests for the Markdown parser."""
 
-from versiref.search.markdown_parser import parse_markdown
+from versiref.search.markdown_parser import extract_milestones, parse_markdown
+from versiref.search.models import RawMilestone
 
 
 def test_empty_input():
@@ -98,3 +99,66 @@ def test_structure_of_minimal_md(minimal_md):
     blocks = parse_markdown(minimal_md.read_text(encoding="utf-8"))
     heading_levels = [b.heading_level for b in blocks]
     assert heading_levels == [1, None, 2, None, None]
+
+
+# --- Milestones ---
+
+
+def test_extract_milestones_inline_page():
+    text, milestones = extract_milestones("Hannah prayed <!-- page: 204 --> and wept.")
+    assert text == "Hannah prayed and wept."
+    assert milestones == [RawMilestone(type="page", value="204", offset=14)]
+    # The offset points into the stripped text
+    assert text[milestones[0].offset :].startswith("and wept")
+
+
+def test_extract_milestones_at_end_of_text():
+    text, milestones = extract_milestones("A short paragraph. <!-- page: 12 -->")
+    assert text == "A short paragraph."
+    assert milestones[0].offset == len(text)
+
+
+def test_extract_milestones_multiple():
+    text, milestones = extract_milestones(
+        "Start <!-- page: 1 --> middle <!-- scope: Jn 8:7 --> end."
+    )
+    assert text == "Start middle end."
+    assert [m.type for m in milestones] == ["page", "scope"]
+    assert [m.offset for m in milestones] == [6, 13]
+
+
+def test_extract_milestones_ignores_other_comments():
+    text, milestones = extract_milestones("Keep <!-- note: this --> comment.")
+    assert text == "Keep <!-- note: this --> comment."
+    assert milestones == []
+
+
+def test_standalone_milestone_attaches_to_next_block():
+    blocks = parse_markdown("Para one.\n\n<!-- page: 53 -->\n\nPara two.\n")
+    assert [b.text for b in blocks] == ["Para one.", "Para two."]
+    assert blocks[0].milestones == []
+    assert blocks[1].milestones == [RawMilestone(type="page", value="53", offset=0)]
+
+
+def test_trailing_milestone_attaches_to_last_block():
+    blocks = parse_markdown("Only paragraph.\n\n<!-- page: 99 -->\n")
+    assert len(blocks) == 1
+    assert blocks[0].milestones == [
+        RawMilestone(type="page", value="99", offset=len("Only paragraph."))
+    ]
+
+
+def test_milestone_in_heading():
+    blocks = parse_markdown("## On Jn 8:7 <!-- scope: Jn 8:7 -->\n")
+    assert len(blocks) == 1
+    assert blocks[0].text == "## On Jn 8:7"
+    assert blocks[0].heading_level == 2
+    assert blocks[0].milestones == [
+        RawMilestone(type="scope", value="Jn 8:7", offset=len("## On Jn 8:7"))
+    ]
+
+
+def test_milestone_preserves_fts_phrase_continuity():
+    """Stripping must rejoin the phrase around a mid-sentence page break."""
+    blocks = parse_markdown("faithful <!-- page: 204 --> persistence\n")
+    assert blocks[0].text == "faithful persistence"

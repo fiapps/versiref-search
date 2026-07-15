@@ -500,3 +500,145 @@ def test_analyze_cli_style_overrides_config(tmp_path):
     assert result.exit_code == 0
     # en-sbl already recognizes "1 Sam", so nothing should be flagged.
     assert "All abbreviations are recognized" in result.output
+
+
+# --- Milestones and commentary scopes ---
+
+PAGED_MD = """\
+# Chapter One
+
+Paragraph citing Lk 1:28 before any page marker.
+
+<!-- page: 53 -->
+
+Paragraph citing Ps 45:10 on page fifty-three.
+"""
+
+COMMENTARY_MD = """\
+# Commentary
+
+## The Pericope Adulterae (Jn 7:53-8:11)
+
+Introductory comments on the pericope.
+
+### On Jn 8:7
+
+Comment about casting the first stone.
+"""
+
+
+def _make_commentary_db(tmp_path: Path) -> Path:
+    md_path = tmp_path / "commentary.md"
+    md_path.write_text(COMMENTARY_MD, encoding="utf-8")
+    db_path = tmp_path / "commentary.db"
+    index_document(
+        input_path=md_path,
+        output_path=db_path,
+        metadata={"title": "Commentary", "versification": "eng"},
+        ref_style=RefStyle.named("en-cmos_short"),
+        commentary_headings=True,
+    )
+    return db_path
+
+
+def test_index_config_commentary_headings(tmp_path):
+    md = tmp_path / "commentary.md"
+    md.write_text(COMMENTARY_MD, encoding="utf-8")
+    metadata = tmp_path / "metadata.yaml"
+    metadata.write_text("title: Commentary\nversification: eng\n", encoding="utf-8")
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "metadata: metadata.yaml\ncommentary_headings: true\n", encoding="utf-8"
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["index", str(md), "-o", str(tmp_path / "out.db"), "-c", str(config)],
+    )
+    assert result.exit_code == 0
+    assert "Commentary scopes: 2" in result.output
+
+
+def test_search_page_shown_in_results(tmp_path):
+    db = _make_db(tmp_path, "paged", PAGED_MD, "Paged")
+    runner = CliRunner()
+    result = runner.invoke(main, ["search", str(db), "-r", "Ps 45:10"])
+    assert result.exit_code == 0
+    assert "page 53]" in result.output
+
+
+def test_search_page_in_xml_output(tmp_path):
+    db = _make_db(tmp_path, "paged", PAGED_MD, "Paged")
+    runner = CliRunner()
+    result = runner.invoke(main, ["search", str(db), "-r", "Ps 45:10", "--xml"])
+    assert result.exit_code == 0
+    assert 'page="53"' in result.output
+
+
+def test_search_commentary_flag(tmp_path):
+    db = _make_commentary_db(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(main, ["search", str(db), "-r", "Jn 8:7", "--commentary"])
+    assert result.exit_code == 0
+    assert "On Jn 8:7" in result.output
+    assert "[Blocks" in result.output
+
+
+def test_search_commentary_requires_reference(tmp_path):
+    db = _make_commentary_db(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(main, ["search", str(db), "-s", "stone", "--commentary"])
+    assert result.exit_code == 1
+    assert "requires --reference" in result.output
+
+
+def test_search_commentary_rejects_string(tmp_path):
+    db = _make_commentary_db(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["search", str(db), "-r", "Jn 8:7", "-s", "stone", "--commentary"]
+    )
+    assert result.exit_code == 1
+    assert "cannot be combined with --string" in result.output
+
+
+def test_show_page(tmp_path):
+    db = _make_db(tmp_path, "paged", PAGED_MD, "Paged")
+    runner = CliRunner()
+    result = runner.invoke(main, ["show", str(db), "--page", "53"])
+    assert result.exit_code == 0
+    assert "fifty-three" in result.output
+    assert "before any page marker" not in result.output
+
+
+def test_show_page_not_found(tmp_path):
+    db = _make_db(tmp_path, "paged", PAGED_MD, "Paged")
+    runner = CliRunner()
+    result = runner.invoke(main, ["show", str(db), "--page", "99"])
+    assert result.exit_code == 1
+    assert "No page milestone '99'" in result.output
+
+
+def test_show_page_rejects_other_modes(tmp_path):
+    db = _make_db(tmp_path, "paged", PAGED_MD, "Paged")
+    runner = CliRunner()
+    result = runner.invoke(main, ["show", str(db), "--page", "53", "--start", "1"])
+    assert result.exit_code != 0
+    assert "cannot be combined" in result.output
+
+
+def test_info_shows_milestone_and_scope_counts(tmp_path):
+    db = _make_commentary_db(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(main, ["info", str(db)])
+    assert result.exit_code == 0
+    assert "commentary scopes: 2" in result.output
+
+
+def test_info_omits_zero_counts(tmp_path):
+    db = _make_db(tmp_path, "doc_a", MINIMAL_MD_A, "Document A")
+    runner = CliRunner()
+    result = runner.invoke(main, ["info", str(db)])
+    assert result.exit_code == 0
+    assert "milestones" not in result.output
+    assert "commentary scopes" not in result.output

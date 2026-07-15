@@ -9,13 +9,16 @@ from versiref.search import (
     IncompatibleDatabaseError,
     SectionTooLargeError,
     get_context,
+    get_page_context,
     get_section_by_block,
     get_section_by_heading,
     get_toc,
     index_document,
+    search_commentary,
     search_database,
 )
 from versiref.search.database import Database
+from versiref.search.searcher import _nearby_pages_hint, _page_sort_key
 
 
 @pytest.fixture
@@ -522,3 +525,195 @@ def test_query_versification_map_to_returns_none(indexed_db, ref_style):
                 reference_query="Ps 23:1",
                 query_versification="lxx",
             )
+
+
+# --- Page milestones ---
+
+
+@pytest.fixture
+def paged_search_db(tmp_path, ref_style):
+    """Database with page milestones around two reference-bearing paragraphs."""
+    content = (
+        "# Chapter One\n\n"
+        "Paragraph citing Lk 1:28 before any page marker.\n\n"
+        "<!-- page: 53 -->\n\n"
+        "Paragraph citing Ps 45:10 on page fifty-three.\n\n"
+        "<!-- page: 82 -->\n\n"
+        "Closing paragraph.\n"
+    )
+    md = tmp_path / "paged.md"
+    md.write_text(content, encoding="utf-8")
+    db = tmp_path / "paged.db"
+    index_document(
+        input_path=md,
+        output_path=db,
+        metadata={"title": "Paged", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    return db
+
+
+def test_search_results_carry_page(paged_search_db, ref_style):
+    results = search_database(paged_search_db, ref_style, reference_query="Ps 45:10")
+    assert len(results) == 1
+    assert results[0].page == "53"
+
+
+def test_search_results_page_none_before_first_milestone(paged_search_db, ref_style):
+    results = search_database(paged_search_db, ref_style, reference_query="Lk 1:28")
+    assert len(results) == 1
+    assert results[0].page is None
+
+
+def test_search_results_page_none_without_milestones(indexed_db, ref_style):
+    results = search_database(indexed_db, ref_style, reference_query="Lk 1:28")
+    assert results and all(r.page is None for r in results)
+
+
+def test_get_page_context_returns_page_blocks(paged_search_db):
+    blocks = get_page_context(paged_search_db, "53", include_headings=False)
+    # Page 53 runs from its first block through the block where page 82 starts.
+    texts = [b.text for b in blocks]
+    assert any("fifty-three" in t for t in texts)
+    assert any("Closing" in t for t in texts)
+    assert not any("before any page marker" in t for t in texts)
+
+
+def test_get_page_context_missing_page_hints_neighbors(paged_search_db):
+    with pytest.raises(ValueError, match="between recorded pages '53' and '82'"):
+        get_page_context(paged_search_db, "60")
+
+
+def test_get_page_context_no_milestones(indexed_db):
+    with pytest.raises(ValueError, match="no page milestones"):
+        get_page_context(indexed_db, "53")
+
+
+def test_get_page_context_respects_max_blocks(paged_search_db):
+    with pytest.raises(SectionTooLargeError):
+        get_page_context(paged_search_db, "53", max_blocks=1)
+
+
+# --- Commentary scope search ---
+
+
+@pytest.fixture
+def commentary_search_db(tmp_path, ref_style):
+    content = (
+        "# Commentary\n\n"
+        "Introduction without references.\n\n"
+        "## The Pericope Adulterae (Jn 7:53-8:11)\n\n"
+        "Introductory comments on the pericope.\n\n"
+        "### On Jn 8:7\n\n"
+        "Comment about casting the first stone.\n\n"
+        "### On Jn 8:11\n\n"
+        "Comment about condemnation.\n\n"
+        "## The Light of the World (Jn 8:12)\n\n"
+        "Comment on the light of the world.\n"
+    )
+    md = tmp_path / "commentary.md"
+    md.write_text(content, encoding="utf-8")
+    db = tmp_path / "commentary.db"
+    index_document(
+        input_path=md,
+        output_path=db,
+        metadata={"title": "Commentary", "versification": "eng"},
+        ref_style=ref_style,
+        commentary_headings=True,
+    )
+    return db
+
+
+def test_search_commentary_returns_narrowest_scope(commentary_search_db, ref_style):
+    results = search_commentary(commentary_search_db, ref_style, "Jn 8:7")
+    # The per-verse section wins; the enclosing pericope scope is dropped.
+    assert len(results) == 1
+    assert results[0].block_text == "### On Jn 8:7"
+    assert (results[0].block_start, results[0].block_end) == (5, 6)
+
+
+def test_search_commentary_wide_scope_when_no_narrow_match(
+    commentary_search_db, ref_style
+):
+    # Jn 8:2 falls in the pericope but no per-verse section covers it.
+    results = search_commentary(commentary_search_db, ref_style, "Jn 8:2")
+    assert len(results) == 1
+    assert "Pericope Adulterae" in results[0].block_text
+
+
+def test_search_commentary_range_query_returns_disjoint_scopes(
+    commentary_search_db, ref_style
+):
+    results = search_commentary(commentary_search_db, ref_style, "Jn 8:7-12")
+    texts = [r.block_text for r in results]
+    assert "### On Jn 8:7" in texts
+    assert "### On Jn 8:11" in texts
+    assert any("Light of the World" in t for t in texts)
+    # The pericope scope contains the per-verse matches and is dropped.
+    assert not any("Pericope Adulterae" in t for t in texts)
+
+
+def test_search_commentary_includes_heading_context(commentary_search_db, ref_style):
+    results = search_commentary(commentary_search_db, ref_style, "Jn 8:7")
+    context_texts = [b.text for b in results[0].heading_context.values()]
+    assert any("Pericope Adulterae" in t for t in context_texts)
+
+
+def test_search_commentary_no_scopes(indexed_db, ref_style):
+    assert search_commentary(indexed_db, ref_style, "Lk 1:28") == []
+
+
+def test_search_commentary_invalid_query_raises(commentary_search_db, ref_style):
+    with pytest.raises(ValueError):
+        search_commentary(commentary_search_db, ref_style, "Not A Reference 12:99x")
+
+
+# --- Page-hint comparison ---
+
+
+def test_nearby_pages_hint_numeric():
+    hint = _nearby_pages_hint("60", ["53", "82"])
+    assert "between recorded pages '53' and '82'" in hint
+
+
+def test_nearby_pages_hint_volume_page():
+    hint = _nearby_pages_hint("2:84", ["2:77", "2:112"])
+    assert "between recorded pages '2:77' and '2:112'" in hint
+
+
+def test_nearby_pages_hint_across_volumes():
+    hint = _nearby_pages_hint("2:84", ["1:200", "3:5"])
+    assert "between recorded pages '1:200' and '3:5'" in hint
+
+
+def test_nearby_pages_hint_roman_before_integers():
+    # Front matter (Roman) sorts before the body (Arabic), whatever the values.
+    hint = _nearby_pages_hint("xx", ["xvii", "5"])
+    assert "between recorded pages 'xvii' and '5'" in hint
+    hint = _nearby_pages_hint("ii", ["xvii", "5"])
+    assert "first recorded page is 'xvii'" in hint
+
+
+def test_nearby_pages_hint_equal_value_different_spelling():
+    hint = _nearby_pages_hint("IV", ["iv", "1"])
+    assert "did you mean 'iv'?" in hint
+
+
+def test_nearby_pages_hint_skips_incomparable_values():
+    hint = _nearby_pages_hint("5", ["A-3", "10"])
+    assert "first recorded page is '10'" in hint
+
+
+def test_nearby_pages_hint_incomparable_query_falls_back():
+    hint = _nearby_pages_hint("A-3", ["53", "82"])
+    assert "recorded pages run from '53' to '82'" in hint
+
+
+def test_page_sort_key_shapes():
+    assert _page_sort_key("84") == ((1, 84),)
+    assert _page_sort_key("2:84") == ((1, 2), (1, 84))
+    assert _page_sort_key("xvii") == ((0, 17),)
+    assert _page_sort_key("MCMXCIV") == ((0, 1994),)
+    assert _page_sort_key("A-3") is None
+    # Roman numerals sort below any integer.
+    assert _page_sort_key("mmm") < _page_sort_key("1")

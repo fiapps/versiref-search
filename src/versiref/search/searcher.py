@@ -1,10 +1,12 @@
 """Search module for versiref-search."""
 
+import re
 from pathlib import Path
+from typing import Any
 from versiref import Versification, RefParser, RefStyle
 
 from .database import Database
-from .models import SearchResult, BlockInfo
+from .models import ScopeResult, SearchResult, BlockInfo
 
 DEFAULT_MAX_SECTION_BLOCKS = 200
 
@@ -58,6 +60,58 @@ def _wrap_reference_spans(text: str, spans: set[tuple[int, int]]) -> str:
     for start, end in reversed(merged):
         text = text[:start] + "<mark>" + text[start:end] + "</mark>" + text[end:]
     return text
+
+
+def _parse_query_reference(
+    ref_style: RefStyle,
+    reference_query: str,
+    versification_name: str,
+    query_versification: str | None,
+) -> Any:
+    """Parse a reference query and map it into a database's versification.
+
+    Args:
+        ref_style: RefStyle for parsing the query
+        reference_query: The reference string to parse
+        versification_name: The database's versification scheme
+        query_versification: Scheme the query is written in, or None to use
+            the database's own scheme
+
+    Returns:
+        The parsed reference, mapped into the database's versification.
+
+    Raises:
+        ValueError: If the query cannot be parsed or mapped.
+
+    """
+    db_versification = Versification.named(versification_name)
+
+    if query_versification is not None:
+        parse_versification = Versification.named(query_versification)
+    else:
+        parse_versification = db_versification
+
+    parser = RefParser(ref_style, parse_versification)
+
+    try:
+        ref = parser.parse(reference_query, silent=False)
+    except Exception as e:
+        raise ValueError(f"Invalid reference query '{reference_query}': {e}")
+
+    if ref is None:
+        raise ValueError(f"Could not parse reference query '{reference_query}'")
+
+    # Map to database versification if needed
+    if query_versification is not None and query_versification != versification_name:
+        mapped = ref.map_to(db_versification)
+        if mapped is None:
+            raise ValueError(
+                f"Could not map reference '{reference_query}' "
+                f"from '{query_versification}' to '{versification_name}'"
+            )
+        ref = mapped
+
+    return ref
 
 
 def search_database(
@@ -128,35 +182,9 @@ def search_database(
 
         # Search by reference if provided
         if reference_query:
-            db_versification = Versification.named(versification_name)
-
-            if query_versification is not None:
-                parse_versification = Versification.named(query_versification)
-            else:
-                parse_versification = db_versification
-
-            parser = RefParser(ref_style, parse_versification)
-
-            try:
-                ref = parser.parse(reference_query, silent=False)
-            except Exception as e:
-                raise ValueError(f"Invalid reference query '{reference_query}': {e}")
-
-            if ref is None:
-                raise ValueError(f"Could not parse reference query '{reference_query}'")
-
-            # Map to database versification if needed
-            if (
-                query_versification is not None
-                and query_versification != versification_name
-            ):
-                mapped = ref.map_to(db_versification)
-                if mapped is None:
-                    raise ValueError(
-                        f"Could not map reference '{reference_query}' "
-                        f"from '{query_versification}' to '{versification_name}'"
-                    )
-                ref = mapped
+            ref = _parse_query_reference(
+                ref_style, reference_query, versification_name, query_versification
+            )
 
             for verse_start, verse_end in ref.range_keys():
                 ref_results = db.search_by_reference_range(
@@ -207,10 +235,259 @@ def search_database(
                     block_id=content_id,
                     block_text=block_text,
                     heading_context=heading_context,
+                    page=db.get_page_for_block(content_id),
                 )
             )
 
         return search_results
+
+
+def search_commentary(
+    db_path: str | Path,
+    ref_style: RefStyle,
+    reference_query: str,
+    include_headings: bool = True,
+    query_versification: str | None = None,
+) -> list[ScopeResult]:
+    """Search a database for commentary on a passage.
+
+    Matches commentary scopes (sections recorded as commenting on a passage,
+    as opposed to merely citing it) whose verse range overlaps the query.
+    When matching scopes nest, only the narrowest are returned: a scope whose
+    block range strictly contains another matching scope is dropped, since
+    the wider scope is visible as heading context of the narrower one.
+
+    Args:
+        db_path: Path to SQLite database file
+        ref_style: RefStyle for parsing the reference query
+        reference_query: Bible reference to find commentary on
+        include_headings: Whether to include heading context in results
+        query_versification: Versification scheme of the query reference
+            (as for :func:`search_database`)
+
+    Returns:
+        List of ScopeResult objects in document order. Empty on databases
+        without commentary scopes.
+
+    Raises:
+        FileNotFoundError: If database doesn't exist
+        IncompatibleDatabaseError: If the database is not a compatible
+            versiref-search index
+        ValueError: If the reference query is invalid or cannot be mapped
+
+    """
+    db_path = Path(db_path)
+    if not db_path.exists():
+        raise FileNotFoundError(f"Database not found: {db_path}")
+
+    with Database(db_path) as db:
+        db.validate_schema()
+
+        versification_name = db.get_metadata("versification_scheme")
+        if not versification_name:
+            raise ValueError("Database missing versification_scheme metadata")
+
+        ref = _parse_query_reference(
+            ref_style, reference_query, versification_name, query_versification
+        )
+
+        # Collect matching scopes, deduplicated by scope id
+        matches: dict[int, tuple[int, int]] = {}
+        for verse_start, verse_end in ref.range_keys():
+            for scope_id, block_start, block_end, _, _ in db.search_scopes(
+                verse_start, verse_end
+            ):
+                matches[scope_id] = (block_start, block_end)
+
+        # Narrowest-first: drop scopes strictly containing another match
+        spans = list(matches.values())
+        survivors = [
+            (start, end)
+            for start, end in spans
+            if not any(
+                (start <= other_start and other_end <= end)
+                and (start, end) != (other_start, other_end)
+                for other_start, other_end in spans
+            )
+        ]
+
+        results: list[ScopeResult] = []
+        for block_start, block_end in sorted(set(survivors)):
+            opening = db.get_content_by_id(block_start)
+            if opening is None:
+                continue
+            _, block_text, _ = opening
+
+            heading_context: dict[int, BlockInfo] = {}
+            if include_headings:
+                headings = db.get_all_preceding_headings(block_start)
+                for level, (heading_id, heading_text) in headings.items():
+                    heading_context[level] = BlockInfo(
+                        id=heading_id, text=heading_text, heading_level=level
+                    )
+
+            results.append(
+                ScopeResult(
+                    block_start=block_start,
+                    block_end=block_end,
+                    block_text=block_text,
+                    heading_context=heading_context,
+                    page=db.get_page_for_block(block_start),
+                )
+            )
+
+        return results
+
+
+def get_page_context(
+    db_path: str | Path,
+    page: str,
+    include_headings: bool = True,
+    max_blocks: int = DEFAULT_MAX_SECTION_BLOCKS,
+) -> list[BlockInfo]:
+    """Get the content blocks of a printed page.
+
+    Looks up the ``page`` milestone with the given value and returns the
+    blocks from it through the next page milestone (inclusive at both ends,
+    since page breaks can fall mid-block). With sparse page milestones the
+    span covers everything up to the next *recorded* page, which may be
+    several printed pages away; the ``max_blocks`` guard refuses runaway
+    spans.
+
+    Args:
+        db_path: Path to SQLite database file
+        page: Page value to look up (exact match, e.g. "204" or "xvii")
+        include_headings: Whether to include preceding headings before the span
+        max_blocks: Maximum number of blocks before refusing
+
+    Returns:
+        List of BlockInfo objects in document order
+
+    Raises:
+        FileNotFoundError: If database doesn't exist
+        IncompatibleDatabaseError: If the database is not a compatible
+            versiref-search index
+        ValueError: If the database has no page milestones or no milestone
+            with this value (the message lists nearby recorded pages)
+        SectionTooLargeError: If the span exceeds max_blocks
+
+    """
+    db_path = Path(db_path)
+    if not db_path.exists():
+        raise FileNotFoundError(f"Database not found: {db_path}")
+
+    with Database(db_path) as db:
+        db.validate_schema()
+
+        span = db.get_page_range(page)
+        if span is None:
+            values = db.get_page_values()
+            if not values:
+                raise ValueError("Database has no page milestones")
+            raise ValueError(
+                f"No page milestone '{page}'; {_nearby_pages_hint(page, values)}"
+            )
+        start_id, end_id = span
+
+        count = db.count_content_range(start_id, end_id)
+        if count > max_blocks:
+            raise SectionTooLargeError(count, max_blocks)
+
+        blocks: list[BlockInfo] = []
+        if include_headings:
+            headings = db.get_all_preceding_headings(start_id)
+            for level in sorted(headings.keys()):
+                heading_id, heading_text = headings[level]
+                blocks.append(
+                    BlockInfo(id=heading_id, text=heading_text, heading_level=level)
+                )
+
+        for block_id, block_text, heading_level in db.get_content_range(
+            start_id, end_id
+        ):
+            blocks.append(
+                BlockInfo(id=block_id, text=block_text, heading_level=heading_level)
+            )
+
+        return blocks
+
+
+# Well-formed Roman numeral (subtractive notation), either case.
+_ROMAN_RE = re.compile(
+    r"(?=[mdclxvi])m*(cm|cd|d?c{0,3})(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})",
+    re.IGNORECASE,
+)
+
+_ROMAN_VALUES = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100, "d": 500, "m": 1000}
+
+
+def _roman_to_int(s: str) -> int:
+    """Convert a well-formed Roman numeral (validated elsewhere) to an int."""
+    total = 0
+    prev = 0
+    for ch in reversed(s.lower()):
+        value = _ROMAN_VALUES[ch]
+        if value < prev:
+            total -= value
+        else:
+            total += value
+        prev = value
+    return total
+
+
+def _page_sort_key(value: str) -> tuple[tuple[int, int], ...] | None:
+    """Build a comparison key for a page value, or None if not comparable.
+
+    The value is split into numeric components ("2:84" -> 2, 84), which
+    compare component-wise, so volume:page style values order naturally.
+    A component is either an Arabic number or a Roman numeral; all Roman
+    numerals compare less than all integers (front matter precedes the body).
+    Values with any other component (e.g. "A-3") are not comparable.
+    """
+    parts = re.findall(r"[0-9]+|[a-zA-Z]+", value)
+    if not parts:
+        return None
+    key = []
+    for part in parts:
+        if part.isdigit():
+            key.append((1, int(part)))
+        elif _ROMAN_RE.fullmatch(part):
+            key.append((0, _roman_to_int(part)))
+        else:
+            return None
+    return tuple(key)
+
+
+def _nearby_pages_hint(page: str, values: list[str]) -> str:
+    """Build a hint naming the recorded pages around a missing page value.
+
+    With sparse page milestones the requested page may fall between two
+    recorded ones; when the values are comparable (see
+    :func:`_page_sort_key`), say so. Recorded values that are not comparable
+    are skipped; if the query itself is not comparable, fall back to the
+    recorded range.
+    """
+    target = _page_sort_key(page)
+    keyed = [(k, v) for v in values if (k := _page_sort_key(v)) is not None]
+    if target is None or not keyed:
+        return f"recorded pages run from '{values[0]}' to '{values[-1]}'"
+
+    equal = next((v for k, v in keyed if k == target), None)
+    if equal is not None:
+        return f"did you mean '{equal}'?"
+
+    below = max((kv for kv in keyed if kv[0] < target), default=None)
+    above = min((kv for kv in keyed if kv[0] > target), default=None)
+    if below and above:
+        return (
+            f"it falls between recorded pages '{below[1]}' and '{above[1]}' "
+            f"(try one of those)"
+        )
+    if below:
+        return f"the last recorded page is '{below[1]}'"
+    if above:
+        return f"the first recorded page is '{above[1]}'"
+    return f"recorded pages run from '{values[0]}' to '{values[-1]}'"
 
 
 def get_toc(

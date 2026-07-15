@@ -65,6 +65,60 @@ def find_unrecognized_abbreviations(
     return unrecognized
 
 
+def _insert_scopes(
+    db: Database,
+    block_start: int,
+    block_end: int,
+    ranges: list[tuple[int, int]],
+) -> None:
+    """Insert one commentary_scope row per verse range for a block span."""
+    for verse_start, verse_end in ranges:
+        db.insert_scope(block_start, block_end, verse_start, verse_end)
+
+
+def _scope_ranges(
+    parser: RefParser,
+    vers: Versification,
+    versification: str,
+    value: str,
+) -> list[tuple[int, int]]:
+    """Resolve an explicit scope marker's reference into verse range keys.
+
+    Applies the same filters as the main reference scan: books must be in
+    the database's versification, and references tagged with a foreign
+    versification are mapped into it. Warns and returns an empty list when
+    the reference cannot be used.
+    """
+    try:
+        ref = parser.parse(value, silent=True)
+    except Exception:
+        ref = None
+    if ref is None:
+        logger.warning('Scope reference "%s" could not be parsed; ignoring.', value)
+        return []
+    if not all(vers.includes(sr.book_id) for sr in ref.simple_refs):
+        logger.warning(
+            'Scope reference "%s" refers to a book not in the '
+            '"%s" versification; ignoring.',
+            value,
+            versification,
+        )
+        return []
+    if ref.versification is not None and ref.versification.identifier != versification:
+        mapped = ref.map_to(vers)
+        if mapped is None:
+            logger.warning(
+                'Scope reference "%s" in versification "%s" could not be '
+                'mapped to "%s"; ignoring.',
+                value,
+                ref.versification.identifier,
+                versification,
+            )
+            return []
+        ref = mapped
+    return list(ref.range_keys())
+
+
 def _normalize_metadata_value(value: object) -> str:
     """Normalize a metadata value to a string.
 
@@ -86,6 +140,7 @@ def index_document(
     check_abbreviations: bool = True,
     abbreviation_whitelist: list[str] | None = None,
     append: bool = False,
+    commentary_headings: bool = False,
 ) -> None:
     """Index a Markdown document into a SQLite database.
 
@@ -107,6 +162,10 @@ def index_document(
             replaced so the result reflects only this document. If True, the
             document's blocks and references are added to the existing
             database (used to combine several documents into one index).
+        commentary_headings: If True, headings containing Bible references
+            open commentary scopes: the referenced passage is recorded as the
+            subject of the section the heading opens (through the next
+            heading at the same or a shallower level).
 
     Raises:
         FileNotFoundError: If input file doesn't exist
@@ -170,9 +229,32 @@ def index_document(
 
         # Index each block
         reference_count = 0
+        # Commentary-scope state. Heading-derived scopes nest via heading
+        # levels; explicit <!-- scope: ... --> markers form one non-nesting
+        # scope at a time. Entries are (level, block_start, ranges) and
+        # (block_start, ranges) respectively.
+        open_heading_scopes: list[tuple[int, int, list[tuple[int, int]]]] = []
+        open_explicit: tuple[int, list[tuple[int, int]]] | None = None
+        last_content_id: int | None = None
+
         for block in blocks:
             # Insert content block
             content_id = db.insert_content(block.text, block.heading_level)
+            last_content_id = content_id
+
+            # A heading closes every open heading scope at its own level or
+            # deeper; those sections end at the previous block.
+            if block.heading_level is not None and open_heading_scopes:
+                still_open = []
+                for level, scope_start, ranges in open_heading_scopes:
+                    if level >= block.heading_level:
+                        _insert_scopes(db, scope_start, content_id - 1, ranges)
+                    else:
+                        still_open.append((level, scope_start, ranges))
+                open_heading_scopes = still_open
+
+            # Verse ranges found in this block (used for heading scopes)
+            block_ranges: list[tuple[int, int]] = []
 
             # Scan for Bible references in the block text
             for ref, start_pos, end_pos in parser.scan_string(
@@ -235,6 +317,49 @@ def index_document(
                         char_end=end_pos,
                     )
                     reference_count += 1
+                    block_ranges.append((verse_start, verse_end))
+
+            # A heading with references opens a commentary scope for the
+            # section it introduces.
+            if commentary_headings and block.heading_level is not None and block_ranges:
+                open_heading_scopes.append(
+                    (block.heading_level, content_id, block_ranges)
+                )
+
+            # Milestones extracted from this block's source text
+            for milestone in block.milestones:
+                if milestone.type == "page":
+                    db.insert_milestone(
+                        "page", milestone.value, content_id, milestone.offset
+                    )
+                elif milestone.type == "scope":
+                    if open_explicit is not None:
+                        # A new scope marker (or "end") closes the open one.
+                        # A marker at offset 0 stood before this block, so the
+                        # closing scope excludes it; an inline marker shares
+                        # the block.
+                        scope_start, ranges = open_explicit
+                        scope_end = (
+                            content_id if milestone.offset > 0 else content_id - 1
+                        )
+                        _insert_scopes(
+                            db, scope_start, max(scope_end, scope_start), ranges
+                        )
+                        open_explicit = None
+                    if milestone.value.strip().lower() != "end":
+                        ranges = _scope_ranges(
+                            parser, vers, versification, milestone.value
+                        )
+                        if ranges:
+                            open_explicit = (content_id, ranges)
+
+        # Close scopes still open at the end of the document.
+        if last_content_id is not None:
+            for _, scope_start, ranges in open_heading_scopes:
+                _insert_scopes(db, scope_start, last_content_id, ranges)
+            if open_explicit is not None:
+                scope_start, ranges = open_explicit
+                _insert_scopes(db, scope_start, last_content_id, ranges)
 
         if reference_count == 0:
             logger.warning(
@@ -252,7 +377,8 @@ def get_index_stats(db_path: str | Path) -> dict:
         db_path: Path to SQLite database file
 
     Returns:
-        Dictionary with statistics (block_count, reference_count, metadata)
+        Dictionary with statistics (block_count, reference_count,
+        milestone_count, scope_count, metadata)
 
     Raises:
         FileNotFoundError: If database doesn't exist
@@ -269,5 +395,7 @@ def get_index_stats(db_path: str | Path) -> dict:
         return {
             "block_count": db.count_content_blocks(),
             "reference_count": db.count_references(),
+            "milestone_count": db.count_milestones(),
+            "scope_count": db.count_scopes(),
             "metadata": db.get_all_metadata(),
         }

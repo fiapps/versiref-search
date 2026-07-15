@@ -37,6 +37,7 @@ Each result includes:
 - **Heading context**: the most recent heading at each level preceding the matched block, giving you the section structure. Each heading is tagged with its own block ID so you can jump to it with `show` or narrow a follow-up search with `--start`/`--end`.
 - **Block text**: the Markdown content of the matched block. Matches are wrapped in `<mark>` tags — matched words for string searches, and cited references for reference searches. When a block is matched by both a string and a reference query, only the string matches are highlighted (see [Highlighting](#highlighting) below).
 - **Block ID**: a sequential identifier that can be used with the `show` command to retrieve surrounding content.
+- **Page**: when the database was indexed with page milestones, the page of the printed edition the block falls on (e.g., `[Block 42, page 204]`, or `page="204"` in XML output). With sparse page milestones this is the most recent *recorded* page before the block.
 
 ### Plain Text Output
 
@@ -112,6 +113,31 @@ versiref-search search mybook.db -r "Ps 23" --native
 
 This is useful when you know the database's scheme and want to query in its terms.
 
+## Finding Commentary on a Passage
+
+For databases indexed with commentary scopes (see [indexing.md](indexing.md)), add `--commentary` (`-C`) to a reference search to find the sections that *comment on* a passage, rather than every block that cites it:
+
+```sh
+versiref-search search commentary.db -r "John 8:7" --commentary
+```
+
+Each result is a section: its heading context, the opening block, and the block range of the whole section, which you can retrieve with `show`:
+
+```text
+# Commentary {block=1}
+## The Pericope Adulterae (Jn 7:53-8:11) {block=3}
+
+[Blocks 5-6]
+### On Jn 8:7
+```
+
+When scopes nest — a pericope-level section containing per-verse subsections — only the narrowest matching scope is returned; the enclosing scopes appear as heading context.
+A query that overlaps several sibling sections returns each of them.
+
+`--commentary` requires `--reference` and cannot be combined with `--string` or `--start`/`--end`.
+The `--style`, `-v`, and `--native` options apply to the query as usual.
+In XML output the section is wrapped in `<scope start="..." end="...">` instead of a `<block>` element.
+
 ## String Search
 
 String search uses SQLite FTS5 for word-boundary matching.
@@ -178,6 +204,20 @@ As with the range form, `--include-headings` prepends the ancestor headings abov
 To guard against accidentally pulling a whole work (for example, asking for everything under a level-1 heading), `show` refuses to return a section larger than `--max-blocks` blocks (default 200).
 When a section is too large it reports the block count; raise `--max-blocks` or choose a deeper `--section` level.
 
+### Retrieving a Page
+
+For databases indexed with page milestones, `--page` retrieves the blocks of a printed page:
+
+```sh
+versiref-search show mybook.db --page 204
+```
+
+The result runs from the block where the page begins through the block where the next recorded page begins (blocks holding a mid-paragraph page break belong to both pages).
+If the page value is not recorded, the error names the recorded pages around it — useful when page milestones are sparse.
+Page values compare naturally for this purpose: multi-part values like `2:84` (volume:page) compare part by part, and Roman-numeral pages (front matter) always sort before Arabic-numbered ones.
+With sparse milestones a "page" can span many blocks (everything up to the next recorded break), so the `--max-blocks` guard applies here as it does for sections.
+`--page` cannot be combined with the other `show` modes.
+
 ## Table of Contents
 
 To survey a database's heading structure, use the `toc` command:
@@ -232,6 +272,7 @@ versiref-search info mybook.db
 ```
 
 This shows the title, versification scheme, and other metadata, along with block and reference counts.
+Databases with milestones or commentary scopes also report those counts.
 
 ## Options Reference
 
@@ -241,6 +282,7 @@ This shows the title, versification scheme, and other metadata, along with block
 | ------ | ----------- |
 | `-r`, `--reference` | Bible reference to search for |
 | `-s`, `--string` | Text string to search for (FTS5 word-boundary, case-insensitive) |
+| `-C`, `--commentary` | Find commentary on the passage (requires `-r`) |
 | `--style` | Reference style for query parsing (default: `en-cmos_short`) |
 | `-v`, `--versification` | Versification scheme of the query reference (default: `eng`) |
 | `--native` | Parse query in each database's native versification |
@@ -257,6 +299,7 @@ This shows the title, versification scheme, and other metadata, along with block
 | `--end` | Ending block ID (inclusive); extends a `--section` request to span sections |
 | `--section` | Retrieve a whole section at this heading level (1–6) |
 | `--heading` | Select a section by matching its heading text (use with `--section`) |
+| `--page` | Retrieve the blocks of a printed page (requires page milestones) |
 | `--max-blocks` | Refuse to return a section larger than this many blocks (default: 200) |
 | `--include-headings` | Include the headings above the range/section |
 
@@ -267,5 +310,5 @@ No additional options.
 
 ## Python API
 
-The `versiref.search` package exports `search_database`, `get_context`, `get_section_by_block`, `get_section_by_heading`, and `get_index_stats` for programmatic use.
+The `versiref.search` package exports `search_database`, `search_commentary`, `get_context`, `get_page_context`, `get_section_by_block`, `get_section_by_heading`, and `get_index_stats` for programmatic use.
 See their docstrings for full parameter documentation.

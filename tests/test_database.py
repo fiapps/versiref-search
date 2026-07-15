@@ -114,7 +114,7 @@ def test_validate_schema_rejects_newer_major(db):
 
 def test_validate_schema_rejects_older_minor(db, monkeypatch):
     # Code requiring 1.1 must reject a 1.0 database that lacks the additions.
-    monkeypatch.setattr("versiref.search.database.SCHEMA_VERSION", "1.1")
+    monkeypatch.setattr("versiref.search.database.REQUIRED_SCHEMA_VERSION", "1.1")
     _mark(db, version="1.0")
     with pytest.raises(IncompatibleDatabaseError, match="incompatible"):
         db.validate_schema()
@@ -352,3 +352,115 @@ def test_count_references(db):
     db.insert_reference(block_id, 42001028, 42001028, 0, 7)
     db.insert_reference(block_id, 19045010, 19045010, 10, 18)
     assert db.count_references() == 2
+
+
+# --- Milestones ---
+
+
+@pytest.fixture
+def db_with_blocks(db):
+    """Database with four plain content blocks (ids 1-4)."""
+    for i in range(1, 5):
+        db.insert_content(f"Paragraph {i}.")
+    return db
+
+
+def test_get_page_for_block_before_any_milestone(db_with_blocks):
+    db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
+    assert db_with_blocks.get_page_for_block(1) is None
+
+
+def test_get_page_for_block_at_and_after_milestone(db_with_blocks):
+    db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
+    assert db_with_blocks.get_page_for_block(2) == "53"
+    assert db_with_blocks.get_page_for_block(4) == "53"
+
+
+def test_get_page_for_block_sparse_reports_latest_recorded(db_with_blocks):
+    # Sparse page numbers: the latest *recorded* page is reported.
+    db_with_blocks.insert_milestone("page", "53", content_id=1, char_offset=0)
+    db_with_blocks.insert_milestone("page", "82", content_id=4, char_offset=0)
+    assert db_with_blocks.get_page_for_block(3) == "53"
+    assert db_with_blocks.get_page_for_block(4) == "82"
+
+
+def test_get_page_for_block_mid_block_offset(db_with_blocks):
+    db_with_blocks.insert_milestone("page", "10", content_id=2, char_offset=8)
+    # At the block's start the break has not happened yet.
+    assert db_with_blocks.get_page_for_block(2) is None
+    assert db_with_blocks.get_page_for_block(2, char_offset=8) == "10"
+    assert db_with_blocks.get_page_for_block(3) == "10"
+
+
+def test_get_page_range_spans_to_next_milestone(db_with_blocks):
+    db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
+    db_with_blocks.insert_milestone("page", "54", content_id=4, char_offset=5)
+    # Page 53 runs from its own block through the block holding the next
+    # break (the break falls mid-block, so block 4 belongs to both pages).
+    assert db_with_blocks.get_page_range("53") == (2, 4)
+
+
+def test_get_page_range_last_page_runs_to_end(db_with_blocks):
+    db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
+    assert db_with_blocks.get_page_range("53") == (2, 4)
+
+
+def test_get_page_range_missing_value(db_with_blocks):
+    db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
+    assert db_with_blocks.get_page_range("54") is None
+
+
+def test_get_page_values_in_document_order(db_with_blocks):
+    db_with_blocks.insert_milestone("page", "xvii", content_id=1, char_offset=0)
+    db_with_blocks.insert_milestone("page", "1", content_id=2, char_offset=0)
+    db_with_blocks.insert_milestone("page", "2", content_id=3, char_offset=0)
+    assert db_with_blocks.get_page_values() == ["xvii", "1", "2"]
+
+
+def test_count_milestones(db_with_blocks):
+    assert db_with_blocks.count_milestones() == 0
+    db_with_blocks.insert_milestone("page", "1", content_id=1, char_offset=0)
+    assert db_with_blocks.count_milestones() == 1
+
+
+# --- Commentary scopes ---
+
+
+def test_search_scopes_overlap(db):
+    db.insert_scope(1, 10, 43007053, 43008011)  # Jn 7:53-8:11
+    db.insert_scope(4, 5, 43008007, 43008007)  # Jn 8:7
+    # A query inside the narrow scope matches both rows.
+    results = db.search_scopes(43008007, 43008007)
+    assert [(r[1], r[2]) for r in results] == [(1, 10), (4, 5)]
+    # A query outside both matches nothing.
+    assert db.search_scopes(43009001, 43009001) == []
+
+
+def test_count_scopes(db):
+    assert db.count_scopes() == 0
+    db.insert_scope(1, 2, 43008007, 43008007)
+    assert db.count_scopes() == 1
+
+
+# --- Graceful degradation on schema-1.0 databases ---
+
+
+@pytest.fixture
+def legacy_db(db_with_blocks):
+    """Simulate a schema-1.0 database lacking the 1.1 tables."""
+    db_with_blocks.conn.execute("DROP TABLE milestone")
+    db_with_blocks.conn.execute("DROP TABLE commentary_scope")
+    db_with_blocks.conn.commit()
+    return db_with_blocks
+
+
+def test_legacy_db_page_queries_return_empty(legacy_db):
+    assert legacy_db.get_page_for_block(1) is None
+    assert legacy_db.get_page_range("53") is None
+    assert legacy_db.get_page_values() == []
+    assert legacy_db.count_milestones() == 0
+
+
+def test_legacy_db_scope_queries_return_empty(legacy_db):
+    assert legacy_db.search_scopes(43008007, 43008007) == []
+    assert legacy_db.count_scopes() == 0

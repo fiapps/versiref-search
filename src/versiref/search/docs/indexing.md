@@ -175,6 +175,9 @@ abbreviations_whitelist:
 
 # Disable the unrecognized abbreviation check entirely
 skip_abbreviations_check: false
+
+# Derive commentary scopes from headings that contain Bible references
+commentary_headings: false
 ```
 
 ### Config Key Reference
@@ -257,6 +260,58 @@ Useful when the source text contains abbreviations that look like Bible referenc
 Set to `true` to disable the unrecognized abbreviation check entirely.
 Default: `false`.
 The CLI `--skip-abbreviations-check` flag also disables it.
+
+#### `commentary_headings`
+
+Set to `true` to derive commentary scopes from headings.
+Default: `false`.
+When enabled, every heading that contains a recognized Bible reference records that passage as the *subject* of the section the heading opens — the section is treated as commentary *on* the passage, not merely as citing it.
+The section runs from the heading through the block before the next heading at the same or a shallower level, so per-verse subsections nest naturally inside a pericope-level section.
+Enable this only for works that are actually commentaries; in other works a reference in a heading is usually just a citation.
+See [Milestones](#milestones) for scope markers you can place in the text when suitable headings do not exist, and [searching.md](searching.md) for how to query scopes.
+
+## Milestones
+
+Milestones are markers embedded in the source Markdown as HTML comments.
+They are **stripped from the stored text** at indexing time and recorded in a separate index, so they never pollute search results, phrase matching, or reference scanning.
+Two milestone types are recognized; any other HTML comment is left in the text untouched.
+
+### Page Milestones
+
+A page milestone records where a page of the printed edition begins:
+
+```markdown
+Text ending page 203. <!-- page: 204 --> Text starting page 204.
+
+<!-- page: 205 -->
+
+A paragraph that starts page 205.
+```
+
+The value is free text, so Roman-numeral front matter (`<!-- page: xvii -->`) works too.
+Markers may fall mid-paragraph (the break position is recorded to the character) or stand alone between blocks.
+
+With page milestones present, search results automatically report the page of each hit, and `show --page` retrieves the blocks of a given page (see [searching.md](searching.md)).
+Page numbers may be sparse — you can record only some page breaks — in which case a hit reports the most recent *recorded* page before it.
+
+### Scope Milestones
+
+A scope milestone marks a span of text as commentary on a passage, independent of headings:
+
+```markdown
+<!-- scope: John 7:53-8:11 -->
+
+Commentary on the pericope adulterae, placed here in an appendix.
+
+More commentary.
+
+<!-- scope: end -->
+```
+
+The scope runs from the marker to a `<!-- scope: end -->` marker, the next scope marker, or the end of the document, whichever comes first.
+The reference is parsed with the same style and versification as the rest of the document.
+Explicit scope markers do not nest; for nested scopes (a pericope section containing per-verse subsections), use headings with `commentary_headings: true` instead.
+Because scopes are recorded as explicit block ranges, they work even when a work comments passages out of canonical order.
 
 ## CLI Options Reference
 
