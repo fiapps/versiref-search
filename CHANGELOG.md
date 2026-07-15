@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The indexing documentation now describes the optional `description` metadata key and encourages setting it.
+- Updated `versiref` to 0.8.0, which adds support for Roman-numeral chapter numbers (common in Latin texts) via the `chapter_number_style` reference-style setting and the new bundled `la-vetus` style.
+- The `analyze` command's abbreviation scan now follows the style's chapter-number convention: with a Roman-numeral style it looks for Roman-numeral chapters (accepting both subtractive and additive forms, e.g. `XIV` and `XIIII`, and skipping letter sequences that are not well-formed numerals), and it recognizes abbreviations written with a trailing period (e.g. `Isa.`).
 
 ## 0.6.2 - 2026-07-05
 

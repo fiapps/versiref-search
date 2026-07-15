@@ -19,6 +19,13 @@ from .models import AbbreviationAnalysis, VersificationScore
 
 _LANG_PREFIX_RE = re.compile(r"^([a-z]{2,3})-")
 
+# Well-formed Roman numeral up to 499 (chapters never exceed CL), in either
+# subtractive ("XLIV") or additive ("XXXXIIII") style. The character classes
+# in _scan_unrecognized guarantee the candidate is nonempty and single-case.
+_ROMAN_NUMERAL_RE = re.compile(
+    r"C{0,4}(?:XC|XL|L?X{0,4})(?:IX|IV|V?I{0,4})", re.IGNORECASE
+)
+
 
 def _scan_unrecognized(text: str, ref_style: RefStyle) -> dict[str, str]:
     """Find candidate book abbreviations in `text` not in `ref_style.recognized_names`.
@@ -26,13 +33,22 @@ def _scan_unrecognized(text: str, ref_style: RefStyle) -> dict[str, str]:
     Returns a mapping of abbreviation to an example of usage.
     """
     sep = re.escape(ref_style.chapter_verse_separator)
-    pattern = rf"((?:[1-4]|[IV]+)\s+)?(\w[\w()]*)\s+\d+{sep}\d+"
+    roman = ref_style.chapter_number_style in ("roman", "roman-lower")
+    if ref_style.chapter_number_style == "roman":
+        chapter = r"[CLXVI]+(?![0-9A-Za-zÆæŒœ])"
+    elif ref_style.chapter_number_style == "roman-lower":
+        chapter = r"[clxvi]+(?![0-9A-Za-zÆæŒœ])"
+    else:
+        chapter = r"\d+"
+    pattern = rf"((?:[1-4]|[IV]+)\s+)?(\w[\w()]*\.?)\s+({chapter}){sep}\d+"
     recognized = ref_style.recognized_names
     unrecognized: dict[str, str] = {}
     for match in re.finditer(pattern, text):
         leading = match.group(1)
         book_name = match.group(2)
-        if book_name.isdigit():
+        if book_name.rstrip(".").isdigit():
+            continue
+        if roman and not _ROMAN_NUMERAL_RE.fullmatch(match.group(3)):
             continue
         abbrev = leading + book_name if leading else book_name
         if abbrev in recognized:
@@ -53,7 +69,10 @@ def analyze_abbreviations(
 
     Scans each input file for things that look like Scripture references
     (using a regex built from ``ref_style.chapter_verse_separator``) and
-    keeps the abbreviations the style does not recognize. Then, from the
+    keeps the abbreviations the style does not recognize. When the style's
+    ``chapter_number_style`` is ``"roman"`` or ``"roman-lower"``, chapter
+    numbers are matched as Roman numerals (rejecting letter sequences that
+    do not form a well-formed numeral); otherwise they are Arabic digits. Then, from the
     bundled :func:`versiref.standard_names` collections matching the
     style's language prefix (e.g. ``en-*``), greedily picks the smallest
     list of sets that cover those abbreviations.

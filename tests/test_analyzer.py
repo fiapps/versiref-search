@@ -198,6 +198,59 @@ def test_abbreviations_whitelist_suppresses_names(tmp_path, ref_style):
     assert result.needed_sets == ["en-bibleworks"]
 
 
+def test_abbreviations_dotted_abbreviation_is_captured(tmp_path, ref_style):
+    md = _write(tmp_path, "doc.md", "He cites Foobar. 1:1.\n")
+    result = analyze_abbreviations([md], ref_style)
+    assert "Foobar." in result.unrecognized
+
+
+def test_abbreviations_number_with_dot_is_not_a_book(tmp_path, ref_style):
+    md = _write(tmp_path, "doc.md", "See page 138. 1:2 is discussed.\n")
+    result = analyze_abbreviations([md], ref_style)
+    assert result.unrecognized == {}
+
+
+def test_abbreviations_roman_chapters(tmp_path):
+    style = RefStyle.named("la-vetus")
+    md = _write(tmp_path, "doc.md", "Citat Eccli. XXIV, 14 et Foobar XLIV, 3.\n")
+    result = analyze_abbreviations([md], style)
+    assert "Eccli." not in result.unrecognized
+    assert "Foobar" in result.unrecognized
+
+
+def test_abbreviations_roman_chapters_reject_malformed_numerals(tmp_path):
+    style = RefStyle.named("la-vetus")
+    # "VL" and "IXI" use only Roman-numeral letters but in an order that
+    # doesn't form a valid numeral.
+    md = _write(tmp_path, "doc.md", "Vide Foobar VL, 3 et Bazqux IXI, 2.\n")
+    result = analyze_abbreviations([md], style)
+    assert result.unrecognized == {}
+
+
+def test_abbreviations_roman_chapters_accept_additive_forms(tmp_path):
+    style = RefStyle.named("la-vetus")
+    md = _write(tmp_path, "doc.md", "Vide Foobar XIIII, 3.\n")
+    result = analyze_abbreviations([md], style)
+    assert "Foobar" in result.unrecognized
+
+
+def test_abbreviations_roman_style_ignores_arabic_chapters(tmp_path):
+    style = RefStyle.named("la-vetus")
+    md = _write(tmp_path, "doc.md", "Vide Foobar 12, 3.\n")
+    result = analyze_abbreviations([md], style)
+    assert result.unrecognized == {}
+
+
+def test_abbreviations_roman_lower_chapters(tmp_path):
+    style = RefStyle.from_dict(
+        {"base": "la-vetus", "chapter_number_style": "roman-lower"}
+    )
+    md = _write(tmp_path, "doc.md", "Vide Foobar xliv, 3 et Bazqux XLIV, 2.\n")
+    result = analyze_abbreviations([md], style)
+    assert "Foobar" in result.unrecognized
+    assert "Bazqux" not in result.unrecognized
+
+
 def test_abbreviations_whitelist_does_not_affect_unrelated(tmp_path, ref_style):
     md = _write(tmp_path, "doc.md", "He cites 1Sa 3:4.\n")
     # Whitelisting something not in the input is a no-op.
