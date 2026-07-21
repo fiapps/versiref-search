@@ -438,15 +438,15 @@ wheels = [
 
 [[package]]
 name = "versiref"
-version = "0.8.0"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "pyparsing" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/60/d7/c088c85edc945e1bbd7253bc58f69e0a26a681e72bf98debc9ae0e3a6be0/versiref-0.8.0.tar.gz", hash = "sha256:7019c42603e760ae59c0266aab74fe1181f50cad23325705cb733f6a12bd379d", size = 79901, upload-time = "2026-07-15T15:33:15.31Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/81/c1/49083501e3dd21bbbe8ad8f0ca06d7310b0990803c0842d1d81e5e59db0f/versiref-0.10.0.tar.gz", hash = "sha256:ab4807ad60a5e5edf9f73661f4427d7b6447a0b38a06ef52360f79dd0f47ec94", size = 84155, upload-time = "2026-07-21T00:08:12.881Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/e1/9cb7820b160dc8cefad29f4df084f7d6f875593e3e544693b3897f4e720e/versiref-0.8.0-py3-none-any.whl", hash = "sha256:ccf8a72e885c38fa584f19db3b971efdd5ae571d57c7a4a18653f05c80ffac6f", size = 103426, upload-time = "2026-07-15T15:33:14.047Z" },
+    { url = "https://files.pythonhosted.org/packages/06/5b/83aefd6ff327ed20a8bf03cee88dd4cdddbffd600f76d88f6bf1c9544a30/versiref-0.10.0-py3-none-any.whl", hash = "sha256:26a1876c2a8a20230a248eec5e166561e61af00b581a1b56f447a919ad31c09f", size = 109334, upload-time = "2026-07-21T00:08:11.856Z" },
 ]
 
 [[package]]
@@ -473,7 +473,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1.0" },
     { name = "mistune", specifier = ">=3.0.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "versiref", specifier = ">=0.8.0" },
+    { name = "versiref", specifier = ">=0.10.0" },
 ]
 
 [package.metadata.requires-dev]

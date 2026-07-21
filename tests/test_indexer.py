@@ -273,7 +273,7 @@ class TestCrossVersificationMapping:
         """A Vulgate reference is stored under its mapped eng key.
 
         'Ps 50:1 Vulg.' in an eng database must be stored under the eng key
-        for Ps 51:1 (19051001), not the raw vulgata key (18050001).
+        for Ps 51:1 (1905100100), not the raw vulgata key (1805000100).
         """
         md = tmp_path / "test.md"
         md.write_text("Compare Ps 50:1 Vulg. with the psalm.", encoding="utf-8")
@@ -289,7 +289,7 @@ class TestCrossVersificationMapping:
                 "SELECT verse_start, verse_end FROM reference_index"
             ).fetchall()
         keys = [(r["verse_start"], r["verse_end"]) for r in rows]
-        assert keys == [(19051001, 19051001)]
+        assert keys == [(1905100100, 1905100100)]
 
     def test_native_reference_still_stored_natively(self, tmp_path):
         """A reference without a foreign identifier keeps the db versification's keys."""
@@ -307,7 +307,7 @@ class TestCrossVersificationMapping:
                 "SELECT verse_start, verse_end FROM reference_index"
             ).fetchall()
         keys = [(r["verse_start"], r["verse_end"]) for r in rows]
-        assert keys == [(43003016, 43003016)]
+        assert keys == [(4300301600, 4300301600)]
 
 
 class TestIndexDocumentAbbreviationCheck:
@@ -427,12 +427,12 @@ def test_heading_scopes_derived(commentary_db):
         # Blocks: 1 h1, 2 intro, 3 h2 pericope, 4 para, 5 h3 (8:7), 6 para,
         # 7 h3 (8:11), 8 para, 9 h2 (8:12), 10 para.
         scopes = {
-            (bs, be, vs, ve) for _, bs, be, vs, ve in db.search_scopes(0, 99999999)
+            (bs, be, vs, ve) for _, bs, be, vs, ve in db.search_scopes(0, 9999999999)
         }
-        assert (3, 8, 43007053, 43008011) in scopes  # pericope section
-        assert (5, 6, 43008007, 43008007) in scopes  # per-verse section
-        assert (7, 8, 43008011, 43008011) in scopes  # per-verse section
-        assert (9, 10, 43008012, 43008012) in scopes  # sibling section to end
+        assert (3, 8, 4300705300, 4300801100) in scopes  # pericope section
+        assert (5, 6, 4300800700, 4300800700) in scopes  # per-verse section
+        assert (7, 8, 4300801100, 4300801100) in scopes  # per-verse section
+        assert (9, 10, 4300801200, 4300801200) in scopes  # sibling section to end
 
 
 def test_heading_scopes_off_by_default(tmp_path, ref_style):
@@ -475,10 +475,10 @@ def test_explicit_scope_markers(tmp_path, ref_style):
     )
     with Database(db_path) as db:
         scopes = [
-            (bs, be, vs, ve) for _, bs, be, vs, ve in db.search_scopes(0, 99999999)
+            (bs, be, vs, ve) for _, bs, be, vs, ve in db.search_scopes(0, 9999999999)
         ]
         # Blocks: 1 h1, 2-3 commentary paragraphs, 4 closing paragraph.
-        assert scopes == [(2, 3, 43007053, 43008011)]
+        assert scopes == [(2, 3, 4300705300, 4300801100)]
 
 
 def test_explicit_scope_open_at_document_end(tmp_path, ref_style):
@@ -495,7 +495,7 @@ def test_explicit_scope_open_at_document_end(tmp_path, ref_style):
         ref_style=ref_style,
     )
     with Database(db_path) as db:
-        scopes = [(bs, be) for _, bs, be, _, _ in db.search_scopes(0, 99999999)]
+        scopes = [(bs, be) for _, bs, be, _, _ in db.search_scopes(0, 9999999999)]
         assert scopes == [(2, 2)]
 
 

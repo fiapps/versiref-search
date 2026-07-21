@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Updated `versiref` to 0.10.0, which widens Bible-reference verse keys to carry a subverse ordinal. This lets inserted verses — such as the Greek additions to Esther (ESG 4:17a-z, which follow but are not part of ESG 4:17) — be matched and ordered distinctly from their base verse, while a subverse cited on an ordinary verse still matches that verse.
+- Database schema version is now 2.0. Because the change alters how existing verse keys are interpreted, databases built by earlier versions are no longer compatible and must be re-indexed; searching one now fails with a clear "re-index the source document" message instead of silently returning wrong results.
+
 ## 0.7.0 - 2026-07-15
 
 ### Added

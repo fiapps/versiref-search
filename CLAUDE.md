@@ -86,7 +86,7 @@ The system uses SQLite databases (one per source document) with three main table
 
 3. **reference_index**: Bible reference positions and ranges
    - `content_id`: References the content block
-   - `verse_start`/`verse_end`: 8-digit integer encodings of verse ranges
+   - `verse_start`/`verse_end`: 10-digit integer encodings of verse ranges
    - `char_start`/`char_end`: Character positions in block_text
    - Multiple rows per content block if multiple references exist
 
@@ -94,12 +94,15 @@ The system uses SQLite databases (one per source document) with three main table
 
 ### Verse Encoding
 
-Bible references use 8-digit integers: `BBCCCVVV`
+Bible references use 10-digit integers: `BBCCCVVVSS`
 - BB: Book number (01-99) according to versification scheme
 - CCC: Chapter number (001-999)
 - VVV: Verse number (001-999)
+- SS: Subverse ordinal (00-99) for inserted verses (e.g., the Greek additions to Esther, ESG 4:17a-z); collapses to 00 for a plain verse or a mere portion of one
 
-Example: Isaiah 7:14 in a scheme where Isaiah is book 27 → `27007014`
+Example: Isaiah 7:14 in a scheme where Isaiah is book 27 → `2700701400`
+
+The keys come from versiref (`BibleRef.range_keys`); this package treats them as opaque, comparable integers and never constructs or decodes them.
 
 ### Range Overlap Logic
 

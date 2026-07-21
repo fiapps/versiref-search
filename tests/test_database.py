@@ -101,21 +101,29 @@ def test_validate_schema_unparseable_version_raises(db):
 
 
 def test_validate_schema_accepts_newer_minor(db):
-    # A 1.1 database satisfies code written against 1.0 (additive changes).
-    _mark(db, version="1.1")
+    # A 2.1 database satisfies code written against 2.0 (additive changes).
+    _mark(db, version="2.1")
     db.validate_schema()
 
 
 def test_validate_schema_rejects_newer_major(db):
-    _mark(db, version="2.0")
+    _mark(db, version="3.0")
     with pytest.raises(IncompatibleDatabaseError, match="incompatible"):
         db.validate_schema()
 
 
+def test_validate_schema_rejects_older_major(db):
+    # A 1.x database (8-digit verse keys) must be rejected outright: the 2.0
+    # key widening makes its stored keys silently mismatch new queries.
+    _mark(db, version="1.1")
+    with pytest.raises(IncompatibleDatabaseError, match="re-index"):
+        db.validate_schema()
+
+
 def test_validate_schema_rejects_older_minor(db, monkeypatch):
-    # Code requiring 1.1 must reject a 1.0 database that lacks the additions.
-    monkeypatch.setattr("versiref.search.database.REQUIRED_SCHEMA_VERSION", "1.1")
-    _mark(db, version="1.0")
+    # Code requiring 2.1 must reject a 2.0 database that lacks the additions.
+    monkeypatch.setattr("versiref.search.database.REQUIRED_SCHEMA_VERSION", "2.1")
+    _mark(db, version="2.0")
     with pytest.raises(IncompatibleDatabaseError, match="incompatible"):
         db.validate_schema()
 
@@ -192,14 +200,14 @@ def test_get_content_range_empty(db):
 
 def test_insert_reference_returns_positive_id(db):
     block_id = db.insert_content("Text with Lk 1:28.")
-    ref_id = db.insert_reference(block_id, 42001028, 42001028, 10, 17)
+    ref_id = db.insert_reference(block_id, 4200102800, 4200102800, 10, 17)
     assert ref_id > 0
 
 
 def test_search_exact_verse_match(db):
     block_id = db.insert_content("Lk 1:28 is cited here.")
-    db.insert_reference(block_id, 42001028, 42001028, 0, 7)
-    results = db.search_by_reference_range(42001028, 42001028)
+    db.insert_reference(block_id, 4200102800, 4200102800, 0, 7)
+    results = db.search_by_reference_range(4200102800, 4200102800)
     assert len(results) == 1
     content_id, block_text, char_start, char_end = results[0]
     assert content_id == block_id
@@ -210,39 +218,39 @@ def test_search_exact_verse_match(db):
 def test_search_query_inside_stored_range(db):
     """Single-verse query overlaps a stored multi-verse reference."""
     block_id = db.insert_content("Lk 1:1-50 cited.")
-    db.insert_reference(block_id, 42001001, 42001050, 0, 10)
-    results = db.search_by_reference_range(42001028, 42001028)
+    db.insert_reference(block_id, 4200100100, 4200105000, 0, 10)
+    results = db.search_by_reference_range(4200102800, 4200102800)
     assert len(results) == 1
 
 
 def test_search_stored_inside_query_range(db):
     """Wide query range contains a stored single-verse reference."""
     block_id = db.insert_content("Lk 1:28 cited.")
-    db.insert_reference(block_id, 42001028, 42001028, 0, 7)
-    results = db.search_by_reference_range(42001001, 42001050)
+    db.insert_reference(block_id, 4200102800, 4200102800, 0, 7)
+    results = db.search_by_reference_range(4200100100, 4200105000)
     assert len(results) == 1
 
 
 def test_search_no_overlap(db):
     block_id = db.insert_content("Lk 1:28 cited.")
-    db.insert_reference(block_id, 42001028, 42001028, 0, 7)
-    results = db.search_by_reference_range(42002001, 42002001)
+    db.insert_reference(block_id, 4200102800, 4200102800, 0, 7)
+    results = db.search_by_reference_range(4200200100, 4200200100)
     assert len(results) == 0
 
 
 def test_search_adjacent_verse_does_not_match(db):
     block_id = db.insert_content("Lk 1:28.")
-    db.insert_reference(block_id, 42001028, 42001028, 0, 7)
-    results = db.search_by_reference_range(42001029, 42001029)
+    db.insert_reference(block_id, 4200102800, 4200102800, 0, 7)
+    results = db.search_by_reference_range(4200102900, 4200102900)
     assert len(results) == 0
 
 
 def test_search_reference_range_multiple_blocks(db):
     id1 = db.insert_content("Block with Lk 1:28.")
     id2 = db.insert_content("Block with Lk 1:30.")
-    db.insert_reference(id1, 42001028, 42001028, 11, 18)
-    db.insert_reference(id2, 42001030, 42001030, 11, 18)
-    results = db.search_by_reference_range(42001001, 42001050)
+    db.insert_reference(id1, 4200102800, 4200102800, 11, 18)
+    db.insert_reference(id2, 4200103000, 4200103000, 11, 18)
+    results = db.search_by_reference_range(4200100100, 4200105000)
     assert len(results) == 2
     assert [r[0] for r in results] == [id1, id2]
 
@@ -250,9 +258,9 @@ def test_search_reference_range_multiple_blocks(db):
 def test_search_reference_range_multiple_matches_in_one_block(db):
     """A block with multiple matching references yields one row per reference."""
     block_id = db.insert_content("Lk 1:28 and later Lk 1:30 are both here.")
-    db.insert_reference(block_id, 42001028, 42001028, 0, 7)
-    db.insert_reference(block_id, 42001030, 42001030, 18, 25)
-    results = db.search_by_reference_range(42001001, 42001050)
+    db.insert_reference(block_id, 4200102800, 4200102800, 0, 7)
+    db.insert_reference(block_id, 4200103000, 4200103000, 18, 25)
+    results = db.search_by_reference_range(4200100100, 4200105000)
     assert len(results) == 2
     assert [(r[2], r[3]) for r in results] == [(0, 7), (18, 25)]
 
@@ -349,8 +357,8 @@ def test_count_references_empty(db):
 
 def test_count_references(db):
     block_id = db.insert_content("Text")
-    db.insert_reference(block_id, 42001028, 42001028, 0, 7)
-    db.insert_reference(block_id, 19045010, 19045010, 10, 18)
+    db.insert_reference(block_id, 420010280000, 420010280000, 0, 7)
+    db.insert_reference(block_id, 1904501000, 1904501000, 10, 18)
     assert db.count_references() == 2
 
 
@@ -427,27 +435,27 @@ def test_count_milestones(db_with_blocks):
 
 
 def test_search_scopes_overlap(db):
-    db.insert_scope(1, 10, 43007053, 43008011)  # Jn 7:53-8:11
-    db.insert_scope(4, 5, 43008007, 43008007)  # Jn 8:7
+    db.insert_scope(1, 10, 4300705300, 4300801100)  # Jn 7:53-8:11
+    db.insert_scope(4, 5, 4300800700, 4300800700)  # Jn 8:7
     # A query inside the narrow scope matches both rows.
-    results = db.search_scopes(43008007, 43008007)
+    results = db.search_scopes(4300800700, 4300800700)
     assert [(r[1], r[2]) for r in results] == [(1, 10), (4, 5)]
     # A query outside both matches nothing.
-    assert db.search_scopes(43009001, 43009001) == []
+    assert db.search_scopes(4300900100, 4300900100) == []
 
 
 def test_count_scopes(db):
     assert db.count_scopes() == 0
-    db.insert_scope(1, 2, 43008007, 43008007)
+    db.insert_scope(1, 2, 4300800700, 4300800700)
     assert db.count_scopes() == 1
 
 
-# --- Graceful degradation on schema-1.0 databases ---
+# --- Graceful degradation when optional tables are absent ---
 
 
 @pytest.fixture
 def legacy_db(db_with_blocks):
-    """Simulate a schema-1.0 database lacking the 1.1 tables."""
+    """Simulate a database lacking the milestone and commentary_scope tables."""
     db_with_blocks.conn.execute("DROP TABLE milestone")
     db_with_blocks.conn.execute("DROP TABLE commentary_scope")
     db_with_blocks.conn.commit()
@@ -462,5 +470,5 @@ def test_legacy_db_page_queries_return_empty(legacy_db):
 
 
 def test_legacy_db_scope_queries_return_empty(legacy_db):
-    assert legacy_db.search_scopes(43008007, 43008007) == []
+    assert legacy_db.search_scopes(4300800700, 4300800700) == []
     assert legacy_db.count_scopes() == 0

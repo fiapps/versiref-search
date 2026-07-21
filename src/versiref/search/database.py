@@ -14,12 +14,20 @@ PRODUCT_NAME = "versiref-search"
 # breaking change. Code requiring X.Y accepts any database whose major equals
 # X and whose minor is >= Y.
 #
+# A breaking change is not only a change to the table/column structure: it also
+# covers a change to how stored values are interpreted. Version 2.0 keeps the
+# 1.x table layout but reinterprets the reference/scope verse keys, which
+# versiref 0.10.0 widened from 8 digits (BBCCCVVV) to 10 (BBCCCVVVSS, adding a
+# subverse ordinal). Old and new keys are different numbers for the same verse,
+# so a 1.x database queried by 2.0 code would silently miss — hence the major
+# bump, which rejects those databases outright and tells the user to re-index.
+#
 # SCHEMA_VERSION is what new databases are stamped with at index time;
 # REQUIRED_SCHEMA_VERSION is the oldest schema this code can read. They
 # differ when new tables are optional at query time (queries against the
 # new tables return empty results on older databases).
-SCHEMA_VERSION = "1.1"
-REQUIRED_SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "2.0"
+REQUIRED_SCHEMA_VERSION = "2.0"
 
 
 class IncompatibleDatabaseError(Exception):
@@ -73,8 +81,8 @@ END;
 CREATE TABLE IF NOT EXISTS reference_index (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     content_id INTEGER NOT NULL,
-    verse_start INTEGER NOT NULL,  -- 8-digit: BBCCCVVV
-    verse_end INTEGER NOT NULL,    -- 8-digit: BBCCCVVV
+    verse_start INTEGER NOT NULL,  -- 10-digit: BBCCCVVVSS
+    verse_end INTEGER NOT NULL,    -- 10-digit: BBCCCVVVSS
     char_start INTEGER NOT NULL,   -- Character position in block_text
     char_end INTEGER NOT NULL,     -- Character position in block_text
     FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE
@@ -104,8 +112,8 @@ CREATE TABLE IF NOT EXISTS commentary_scope (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     block_start INTEGER NOT NULL,  -- first content id of the commented span
     block_end INTEGER NOT NULL,    -- last content id (inclusive)
-    verse_start INTEGER NOT NULL,  -- 8-digit: BBCCCVVV
-    verse_end INTEGER NOT NULL     -- 8-digit: BBCCCVVV
+    verse_start INTEGER NOT NULL,  -- 10-digit: BBCCCVVVSS
+    verse_end INTEGER NOT NULL     -- 10-digit: BBCCCVVVSS
 );
 
 CREATE INDEX IF NOT EXISTS idx_scope_verse ON commentary_scope(verse_start, verse_end);
@@ -250,7 +258,8 @@ class Database:
         if db_major != req_major or db_minor < req_minor:
             raise IncompatibleDatabaseError(
                 f"{self.db_path}: schema version {version} is incompatible with "
-                f"this code (requires {REQUIRED_SCHEMA_VERSION})"
+                f"this code (requires {REQUIRED_SCHEMA_VERSION}); "
+                "re-index the source document"
             )
 
     def insert_content(self, block_text: str, heading_level: int | None = None) -> int:
@@ -287,8 +296,8 @@ class Database:
 
         Args:
             content_id: ID of content block containing the reference
-            verse_start: Start verse (8-digit integer: BBCCCVVV)
-            verse_end: End verse (8-digit integer: BBCCCVVV)
+            verse_start: Start verse (10-digit integer: BBCCCVVVSS)
+            verse_end: End verse (10-digit integer: BBCCCVVVSS)
             char_start: Character position in block_text where reference starts
             char_end: Character position in block_text where reference ends
 
@@ -456,8 +465,8 @@ class Database:
         Args:
             block_start: First content ID of the commented span
             block_end: Last content ID of the commented span (inclusive)
-            verse_start: Start verse (8-digit integer: BBCCCVVV)
-            verse_end: End verse (8-digit integer: BBCCCVVV)
+            verse_start: Start verse (10-digit integer: BBCCCVVVSS)
+            verse_end: End verse (10-digit integer: BBCCCVVVSS)
 
         Returns:
             ID of inserted scope entry
@@ -482,8 +491,8 @@ class Database:
         """Search for commentary scopes whose verse range overlaps the query range.
 
         Args:
-            query_start: Start of query range (8-digit integer)
-            query_end: End of query range (8-digit integer)
+            query_start: Start of query range (10-digit integer)
+            query_end: End of query range (10-digit integer)
 
         Returns:
             List of tuples: (id, block_start, block_end, verse_start,
@@ -528,8 +537,8 @@ class Database:
         want to highlight every match need all spans.
 
         Args:
-            query_start: Start of query range (8-digit integer)
-            query_end: End of query range (8-digit integer)
+            query_start: Start of query range (10-digit integer)
+            query_end: End of query range (10-digit integer)
             block_start: Optional minimum content block ID (inclusive)
             block_end: Optional maximum content block ID (inclusive)
 
