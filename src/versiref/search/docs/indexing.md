@@ -274,7 +274,7 @@ See [Milestones](#milestones) for scope markers you can place in the text when s
 
 Milestones are markers embedded in the source Markdown as HTML comments.
 They are **stripped from the stored text** at indexing time and recorded in a separate index, so they never pollute search results, phrase matching, or reference scanning.
-Two milestone types are recognized; any other HTML comment is left in the text untouched.
+Three milestone types are recognized; any other HTML comment is left in the text untouched.
 
 ### Page Milestones
 
@@ -293,6 +293,27 @@ Markers may fall mid-paragraph (the break position is recorded to the character)
 
 With page milestones present, search results automatically report the page of each hit, and `show --page` retrieves the blocks of a given page (see [searching.md](searching.md)).
 Page numbers may be sparse — you can record only some page breaks — in which case a hit reports the most recent *recorded* page before it.
+
+### Marginal-Number Milestones
+
+A marg milestone records where a passage identified by a marginal number in an anthology begins — for example, the numbers Rouet's Enchiridion Patristicum assigns to its excerpts:
+
+```markdown
+<!-- marg: 652 -->
+
+Text of excerpt 652.
+
+<!-- marg: 653 -->
+
+Text of excerpt 653.
+```
+
+Marginal numbers may be sparse, and are looked up and reported the same way page numbers are (`show --marg`, and automatically in search results — see [searching.md](searching.md)).
+
+Some editions insert extra passages between two marginal numbers by appending a letter, as Jurgens's translation does between Rouet's 652 and 653 (`652a`, `652b`).
+That works as a plain value — index it with `<!-- marg: 652a -->` — and it also sorts correctly (`652` < `652a` < `652b` < `653`) for the "nearby recorded values" hint when a lookup misses.
+When a run of letters is long enough to exhaust the alphabet, Jurgens continues by doubling the letter rather than restarting at `aa`, `ab`, `ac`, …: the longest such run, between Rouet's 651 and 652, goes `651a` … `651z`, `651aa`, `651bb`, `651cc`, `651dd`.
+That sorts correctly too — a repeated-letter suffix of length *n* on the *k*-th letter is ordered as sub-ordinal `(n - 1) * 26 + k`.
 
 ### Scope Milestones
 

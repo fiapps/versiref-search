@@ -514,6 +514,20 @@ Paragraph citing Lk 1:28 before any page marker.
 Paragraph citing Ps 45:10 on page fifty-three.
 """
 
+MARG_MD = """\
+# Chapter One
+
+Paragraph citing Lk 1:28 before any marg marker.
+
+<!-- marg: 667 -->
+
+Paragraph citing Ps 45:10 in excerpt 667.
+
+<!-- marg: 667a -->
+
+Inserted excerpt.
+"""
+
 COMMENTARY_MD = """\
 # Commentary
 
@@ -625,6 +639,63 @@ def test_show_page_rejects_other_modes(tmp_path):
     result = runner.invoke(main, ["show", str(db), "--page", "53", "--start", "1"])
     assert result.exit_code != 0
     assert "cannot be combined" in result.output
+
+
+def test_search_marg_shown_in_results(tmp_path):
+    db = _make_db(tmp_path, "marg", MARG_MD, "Marg")
+    runner = CliRunner()
+    result = runner.invoke(main, ["search", str(db), "-r", "Ps 45:10"])
+    assert result.exit_code == 0
+    assert "marg 667]" in result.output
+
+
+def test_search_marg_in_xml_output(tmp_path):
+    db = _make_db(tmp_path, "marg", MARG_MD, "Marg")
+    runner = CliRunner()
+    result = runner.invoke(main, ["search", str(db), "-r", "Ps 45:10", "--xml"])
+    assert result.exit_code == 0
+    assert 'marg="667"' in result.output
+
+
+def test_show_marg(tmp_path):
+    db = _make_db(tmp_path, "marg", MARG_MD, "Marg")
+    runner = CliRunner()
+    result = runner.invoke(main, ["show", str(db), "--marg", "667"])
+    assert result.exit_code == 0
+    assert "in excerpt 667" in result.output
+    assert "before any marg marker" not in result.output
+
+
+def test_show_marg_sub_ordinal_value(tmp_path):
+    db = _make_db(tmp_path, "marg", MARG_MD, "Marg")
+    runner = CliRunner()
+    result = runner.invoke(main, ["show", str(db), "--marg", "667a"])
+    assert result.exit_code == 0
+    assert "Inserted excerpt" in result.output
+
+
+def test_show_marg_not_found(tmp_path):
+    db = _make_db(tmp_path, "marg", MARG_MD, "Marg")
+    runner = CliRunner()
+    result = runner.invoke(main, ["show", str(db), "--marg", "999"])
+    assert result.exit_code == 1
+    assert "No marg value milestone '999'" in result.output
+
+
+def test_show_marg_rejects_other_modes(tmp_path):
+    db = _make_db(tmp_path, "marg", MARG_MD, "Marg")
+    runner = CliRunner()
+    result = runner.invoke(main, ["show", str(db), "--marg", "667", "--start", "1"])
+    assert result.exit_code != 0
+    assert "cannot be combined" in result.output
+
+
+def test_show_marg_rejects_page(tmp_path):
+    db = _make_db(tmp_path, "marg", MARG_MD, "Marg")
+    runner = CliRunner()
+    result = runner.invoke(main, ["show", str(db), "--marg", "667", "--page", "53"])
+    assert result.exit_code != 0
+    assert "cannot be combined with --marg" in result.output
 
 
 def test_info_shows_milestone_and_scope_counts(tmp_path):

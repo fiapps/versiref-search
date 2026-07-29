@@ -127,6 +127,12 @@ def test_extract_milestones_multiple():
     assert [m.offset for m in milestones] == [6, 13]
 
 
+def test_extract_milestones_marg():
+    text, milestones = extract_milestones("Excerpt 667. <!-- marg: 667a --> More text.")
+    assert text == "Excerpt 667. More text."
+    assert milestones == [RawMilestone(type="marg", value="667a", offset=13)]
+
+
 def test_extract_milestones_ignores_other_comments():
     text, milestones = extract_milestones("Keep <!-- note: this --> comment.")
     assert text == "Keep <!-- note: this --> comment."

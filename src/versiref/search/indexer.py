@@ -328,9 +328,9 @@ def index_document(
 
             # Milestones extracted from this block's source text
             for milestone in block.milestones:
-                if milestone.type == "page":
+                if milestone.type in ("page", "marg"):
                     db.insert_milestone(
-                        "page", milestone.value, content_id, milestone.offset
+                        milestone.type, milestone.value, content_id, milestone.offset
                     )
                 elif milestone.type == "scope":
                     if open_explicit is not None:

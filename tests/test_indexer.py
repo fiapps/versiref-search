@@ -408,9 +408,9 @@ def test_page_milestones_indexed(paged_db):
     assert stats["milestone_count"] == 2
     with Database(paged_db) as db:
         # Block 2 holds the inline page-12 break; block 3 starts page 13.
-        assert db.get_page_for_block(1) is None
-        assert db.get_page_for_block(3) == "13"
-        assert db.get_page_range("12") == (2, 3)
+        assert db.get_milestone_for_block(1, "page") is None
+        assert db.get_milestone_for_block(3, "page") == "13"
+        assert db.get_milestone_range("page", "12") == (2, 3)
 
 
 def test_page_markers_stripped_from_content(paged_db):
@@ -418,6 +418,48 @@ def test_page_markers_stripped_from_content(paged_db):
         _, text, _ = db.get_content_by_id(2)
         assert "<!--" not in text
         assert "page" not in text.lower() or "page twelve" in text
+
+
+MARG_MD = """\
+# Chapter One
+
+First excerpt citing Lk 1:28. <!-- marg: 667 --> Text of excerpt 667.
+
+<!-- marg: 667a -->
+
+Inserted excerpt citing Ps 45:10.
+"""
+
+
+@pytest.fixture
+def marg_db(tmp_path, ref_style):
+    md = tmp_path / "marg.md"
+    md.write_text(MARG_MD, encoding="utf-8")
+    db_path = tmp_path / "marg.db"
+    index_document(
+        input_path=md,
+        output_path=db_path,
+        metadata={"title": "Marg", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    return db_path
+
+
+def test_marg_milestones_indexed(marg_db):
+    stats = get_index_stats(marg_db)
+    assert stats["milestone_count"] == 2
+    with Database(marg_db) as db:
+        # Block 2 holds the inline marg-667 marker; block 3 starts marg 667a.
+        assert db.get_milestone_for_block(1, "marg") is None
+        assert db.get_milestone_for_block(3, "marg") == "667a"
+        assert db.get_milestone_range("marg", "667") == (2, 3)
+
+
+def test_marg_markers_stripped_from_content(marg_db):
+    with Database(marg_db) as db:
+        _, text, _ = db.get_content_by_id(2)
+        assert "<!--" not in text
+        assert "marg" not in text.lower()
 
 
 def test_heading_scopes_derived(commentary_db):

@@ -9,6 +9,7 @@ from versiref.search import (
     IncompatibleDatabaseError,
     SectionTooLargeError,
     get_context,
+    get_marg_context,
     get_page_context,
     get_section_by_block,
     get_section_by_heading,
@@ -18,7 +19,7 @@ from versiref.search import (
     search_database,
 )
 from versiref.search.database import Database
-from versiref.search.searcher import _nearby_pages_hint, _page_sort_key
+from versiref.search.searcher import _nearby_milestone_hint, _milestone_sort_key
 
 
 @pytest.fixture
@@ -594,6 +595,79 @@ def test_get_page_context_respects_max_blocks(paged_search_db):
         get_page_context(paged_search_db, "53", max_blocks=1)
 
 
+# --- Marg milestones ---
+
+
+@pytest.fixture
+def marg_search_db(tmp_path, ref_style):
+    """Database with marg milestones (including a sub-ordinal) around two reference-bearing paragraphs."""
+    content = (
+        "# Chapter One\n\n"
+        "Paragraph citing Lk 1:28 before any marg marker.\n\n"
+        "<!-- marg: 652 -->\n\n"
+        "Paragraph citing Ps 45:10 in excerpt 652.\n\n"
+        "<!-- marg: 652a -->\n\n"
+        "Inserted excerpt.\n\n"
+        "<!-- marg: 653 -->\n\n"
+        "Closing excerpt.\n"
+    )
+    md = tmp_path / "marg.md"
+    md.write_text(content, encoding="utf-8")
+    db = tmp_path / "marg.db"
+    index_document(
+        input_path=md,
+        output_path=db,
+        metadata={"title": "Marg", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    return db
+
+
+def test_search_results_carry_marg(marg_search_db, ref_style):
+    results = search_database(marg_search_db, ref_style, reference_query="Ps 45:10")
+    assert len(results) == 1
+    assert results[0].marg == "652"
+
+
+def test_search_results_marg_none_before_first_milestone(marg_search_db, ref_style):
+    results = search_database(marg_search_db, ref_style, reference_query="Lk 1:28")
+    assert len(results) == 1
+    assert results[0].marg is None
+
+
+def test_get_marg_context_returns_marg_blocks(marg_search_db):
+    blocks = get_marg_context(marg_search_db, "652", include_headings=False)
+    texts = [b.text for b in blocks]
+    assert any("in excerpt 652" in t for t in texts)
+    assert any("Inserted excerpt" in t for t in texts)
+    assert not any("before any marg marker" in t for t in texts)
+    assert not any("Closing excerpt" in t for t in texts)
+
+
+def test_get_marg_context_sub_ordinal_value(marg_search_db):
+    blocks = get_marg_context(marg_search_db, "652a", include_headings=False)
+    texts = [b.text for b in blocks]
+    assert any("Inserted excerpt" in t for t in texts)
+    assert any("Closing excerpt" in t for t in texts)
+
+
+def test_get_marg_context_missing_value_hints_neighbors(marg_search_db):
+    with pytest.raises(
+        ValueError, match="between recorded marg values '652a' and '653'"
+    ):
+        get_marg_context(marg_search_db, "652b")
+
+
+def test_get_marg_context_no_milestones(indexed_db):
+    with pytest.raises(ValueError, match="no marg value milestones"):
+        get_marg_context(indexed_db, "652")
+
+
+def test_get_marg_context_respects_max_blocks(marg_search_db):
+    with pytest.raises(SectionTooLargeError):
+        get_marg_context(marg_search_db, "652", max_blocks=1)
+
+
 # --- Commentary scope search ---
 
 
@@ -671,49 +745,100 @@ def test_search_commentary_invalid_query_raises(commentary_search_db, ref_style)
 # --- Page-hint comparison ---
 
 
-def test_nearby_pages_hint_numeric():
-    hint = _nearby_pages_hint("60", ["53", "82"])
+def test_nearby_milestone_hint_numeric():
+    hint = _nearby_milestone_hint("60", ["53", "82"], "page")
     assert "between recorded pages '53' and '82'" in hint
 
 
-def test_nearby_pages_hint_volume_page():
-    hint = _nearby_pages_hint("2:84", ["2:77", "2:112"])
+def test_nearby_milestone_hint_volume_page():
+    hint = _nearby_milestone_hint("2:84", ["2:77", "2:112"], "page")
     assert "between recorded pages '2:77' and '2:112'" in hint
 
 
-def test_nearby_pages_hint_across_volumes():
-    hint = _nearby_pages_hint("2:84", ["1:200", "3:5"])
+def test_nearby_milestone_hint_across_volumes():
+    hint = _nearby_milestone_hint("2:84", ["1:200", "3:5"], "page")
     assert "between recorded pages '1:200' and '3:5'" in hint
 
 
-def test_nearby_pages_hint_roman_before_integers():
+def test_nearby_milestone_hint_roman_before_integers():
     # Front matter (Roman) sorts before the body (Arabic), whatever the values.
-    hint = _nearby_pages_hint("xx", ["xvii", "5"])
+    hint = _nearby_milestone_hint("xx", ["xvii", "5"], "page")
     assert "between recorded pages 'xvii' and '5'" in hint
-    hint = _nearby_pages_hint("ii", ["xvii", "5"])
+    hint = _nearby_milestone_hint("ii", ["xvii", "5"], "page")
     assert "first recorded page is 'xvii'" in hint
 
 
-def test_nearby_pages_hint_equal_value_different_spelling():
-    hint = _nearby_pages_hint("IV", ["iv", "1"])
+def test_nearby_milestone_hint_equal_value_different_spelling():
+    hint = _nearby_milestone_hint("IV", ["iv", "1"], "page")
     assert "did you mean 'iv'?" in hint
 
 
-def test_nearby_pages_hint_skips_incomparable_values():
-    hint = _nearby_pages_hint("5", ["A-3", "10"])
+def test_nearby_milestone_hint_skips_incomparable_values():
+    hint = _nearby_milestone_hint("5", ["A-3", "10"], "page")
     assert "first recorded page is '10'" in hint
 
 
-def test_nearby_pages_hint_incomparable_query_falls_back():
-    hint = _nearby_pages_hint("A-3", ["53", "82"])
+def test_nearby_milestone_hint_incomparable_query_falls_back():
+    hint = _nearby_milestone_hint("A-3", ["53", "82"], "page")
     assert "recorded pages run from '53' to '82'" in hint
 
 
-def test_page_sort_key_shapes():
-    assert _page_sort_key("84") == ((1, 84),)
-    assert _page_sort_key("2:84") == ((1, 2), (1, 84))
-    assert _page_sort_key("xvii") == ((0, 17),)
-    assert _page_sort_key("MCMXCIV") == ((0, 1994),)
-    assert _page_sort_key("A-3") is None
+def test_nearby_milestone_hint_uses_noun_for_marg():
+    hint = _nearby_milestone_hint("654", ["652", "652a", "653"], "marg value")
+    assert hint == "the last recorded marg value is '653'"
+
+
+def test_nearby_milestone_hint_between_sub_ordinal_and_next():
+    hint = _nearby_milestone_hint("652a", ["652", "653"], "marg value")
+    assert "between recorded marg values '652' and '653'" in hint
+
+
+def test_milestone_sort_key_shapes():
+    assert _milestone_sort_key("84") == ((1, 84),)
+    assert _milestone_sort_key("2:84") == ((1, 2), (1, 84))
+    assert _milestone_sort_key("xvii") == ((0, 17),)
+    assert _milestone_sort_key("MCMXCIV") == ((0, 1994),)
+    assert _milestone_sort_key("A-3") is None
     # Roman numerals sort below any integer.
-    assert _page_sort_key("mmm") < _page_sort_key("1")
+    assert _milestone_sort_key("mmm") < _milestone_sort_key("1")
+
+
+def test_milestone_sort_key_sub_ordinal_letters():
+    # Inserted-passage numbering (e.g. Jurgens's 652a/652b between Rouet's
+    # 652 and 653) sorts between the base number and the next one.
+    assert (
+        _milestone_sort_key("652")
+        < _milestone_sort_key("652a")
+        < _milestone_sort_key("652b")
+        < _milestone_sort_key("653")
+    )
+
+
+def test_milestone_sort_key_sub_ordinal_doubles_letters_past_z():
+    # The longest Jurgens insertion runs 651a...651z, then continues by
+    # doubling the letter rather than restarting at "aa", "ab", "ac", ...:
+    # 651aa, 651bb, 651cc, 651dd, before Rouet's 652.
+    keys = [
+        _milestone_sort_key(v)
+        for v in (
+            "651",
+            "651a",
+            "651y",
+            "651z",
+            "651aa",
+            "651bb",
+            "651cc",
+            "651dd",
+            "652",
+        )
+    ]
+    assert keys == sorted(keys)
+    assert len(set(keys)) == len(keys)  # all distinct
+
+
+def test_milestone_sort_key_sub_ordinal_with_volume_prefix():
+    assert (
+        _milestone_sort_key("2:84")
+        < _milestone_sort_key("2:84a")
+        < _milestone_sort_key("2:85")
+    )

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Marg milestones: mark the marginal numbers an anthology uses to cite its excerpts (e.g. Rouet's Enchiridion Patristicum numbering) with `<!-- marg: 652 -->` comments, indexed the same way page milestones are. Search results report the marginal number of each hit (`[Block 42, marg 652]`, `marg="652"` in XML), and `show --marg 652` retrieves the blocks of a numbered passage. Marginal numbers may be sparse, and editions that insert extra passages by appending a letter (e.g. Jurgens's "652a", "652b" between Rouet's "652" and "653", continuing past "z" by doubling the letter rather than restarting the alphabet — Rouet's 651–652 holds "651a" … "651z", "651aa", "651bb", "651cc", "651dd") can be indexed as-is: the letter suffix sorts as a sub-ordinal, so lookups and "nearby recorded values" hints on a miss order it correctly between the base number and the next one. This sub-ordinal ordering also applies to page values.
+
 ## 0.8.0 - 2026-07-20
 
 ### Changed

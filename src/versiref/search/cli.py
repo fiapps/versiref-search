@@ -16,6 +16,7 @@ from .searcher import (
     DEFAULT_MAX_SECTION_BLOCKS,
     SectionTooLargeError,
     get_context,
+    get_marg_context,
     get_page_context,
     get_section_by_block,
     get_section_by_heading,
@@ -515,6 +516,12 @@ def docs(name: str | None) -> None:
     help="Retrieve the blocks of a printed page (requires page milestones)",
 )
 @click.option(
+    "--marg",
+    "marg_value",
+    default=None,
+    help="Retrieve the blocks of a marginal-number passage (requires marg milestones)",
+)
+@click.option(
     "--max-blocks",
     type=int,
     default=DEFAULT_MAX_SECTION_BLOCKS,
@@ -533,22 +540,26 @@ def show(
     section_level: int | None,
     heading_text: str | None,
     page_value: str | None,
+    marg_value: str | None,
     max_blocks: int,
     include_headings: bool,
 ) -> None:
     r"""Retrieve content blocks from a database.
 
-    Four modes:
+    Five modes:
 
     \b
-      Range:           --start S --end E
+      Range:            --start S --end E
       Section by block: --start S --section L  (add --end to span sections)
       Section by text:  --heading TEXT --section L
-      Page:            --page VALUE
+      Page:             --page VALUE
+      Marginal number:  --marg VALUE
 
     Blocks are returned in document order.
     """
     try:
+        if page_value is not None and marg_value is not None:
+            raise click.UsageError("--page cannot be combined with --marg")
         if page_value is not None:
             if any(
                 option is not None
@@ -560,6 +571,20 @@ def show(
             blocks = get_page_context(
                 db_path=database,
                 page=page_value,
+                include_headings=include_headings,
+                max_blocks=max_blocks,
+            )
+        elif marg_value is not None:
+            if any(
+                option is not None
+                for option in (start, end, section_level, heading_text)
+            ):
+                raise click.UsageError(
+                    "--marg cannot be combined with --start/--end/--section/--heading"
+                )
+            blocks = get_marg_context(
+                db_path=database,
+                marg=marg_value,
                 include_headings=include_headings,
                 max_blocks=max_blocks,
             )

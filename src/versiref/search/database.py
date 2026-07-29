@@ -359,21 +359,25 @@ class Database:
         assert cursor.lastrowid is not None
         return cursor.lastrowid
 
-    def get_page_for_block(self, content_id: int, char_offset: int = 0) -> str | None:
-        """Get the page in effect at a position, if page milestones exist.
+    def get_milestone_for_block(
+        self, content_id: int, milestone_type: str, char_offset: int = 0
+    ) -> str | None:
+        """Get the milestone value in effect at a position, if any exist.
 
-        Returns the value of the latest "page" milestone at or before the
-        given position. With sparse page milestones this is the most recent
-        *recorded* page, which may precede the actual page.
+        Returns the value of the latest milestone of the given type at or
+        before the given position. With sparse milestones this is the most
+        recent *recorded* value, which may precede the actual position (e.g.
+        the actual printed page, or the actual marginal-number passage).
 
         Args:
             content_id: Content block ID
+            milestone_type: Milestone type to look up (e.g. "page", "marg")
             char_offset: Character position within the block (default: block
                 start, which still counts milestones recorded at offset 0)
 
         Returns:
-            Page value, or None if no page milestone precedes the position
-            (including databases without a milestone table).
+            Milestone value, or None if no milestone of this type precedes
+            the position (including databases without a milestone table).
 
         """
         if not self.conn:
@@ -383,27 +387,31 @@ class Database:
 
         cursor = self.conn.execute(
             """SELECT value FROM milestone
-               WHERE type = 'page'
+               WHERE type = ?
                  AND (content_id < ? OR (content_id = ? AND char_offset <= ?))
                ORDER BY content_id DESC, char_offset DESC
                LIMIT 1""",
-            (content_id, content_id, char_offset),
+            (milestone_type, content_id, content_id, char_offset),
         )
         row = cursor.fetchone()
         return row["value"] if row else None
 
-    def get_page_range(self, value: str) -> tuple[int, int] | None:
-        """Get the content-block span covered by a page.
+    def get_milestone_range(
+        self, milestone_type: str, value: str
+    ) -> tuple[int, int] | None:
+        """Get the content-block span covered by a milestone value.
 
-        The span runs from the block holding the page's milestone through the
-        block holding the next page milestone (inclusive, since a page break
-        can fall mid-block), or through the last block if it is the last page.
+        The span runs from the block holding the milestone through the block
+        holding the next milestone of the same type (inclusive, since a
+        marker can fall mid-block), or through the last block if it is the
+        last one recorded.
 
         Args:
-            value: Page value to look up (exact match)
+            milestone_type: Milestone type to look up (e.g. "page", "marg")
+            value: Milestone value to look up (exact match)
 
         Returns:
-            Tuple of (start_id, end_id), or None if no such page milestone
+            Tuple of (start_id, end_id), or None if no such milestone
             (including databases without a milestone table).
 
         """
@@ -414,10 +422,10 @@ class Database:
 
         cursor = self.conn.execute(
             """SELECT content_id, char_offset FROM milestone
-               WHERE type = 'page' AND value = ?
+               WHERE type = ? AND value = ?
                ORDER BY content_id, char_offset
                LIMIT 1""",
-            (value,),
+            (milestone_type, value),
         )
         row = cursor.fetchone()
         if row is None:
@@ -426,11 +434,11 @@ class Database:
 
         cursor = self.conn.execute(
             """SELECT content_id FROM milestone
-               WHERE type = 'page'
+               WHERE type = ?
                  AND (content_id > ? OR (content_id = ? AND char_offset > ?))
                ORDER BY content_id, char_offset
                LIMIT 1""",
-            (start_id, start_id, start_offset),
+            (milestone_type, start_id, start_id, start_offset),
         )
         row = cursor.fetchone()
         if row is not None:
@@ -440,10 +448,16 @@ class Database:
         assert max_id is not None  # a milestone implies at least one block
         return start_id, max_id
 
-    def get_page_values(self) -> list[str]:
-        """Get all page milestone values in document order.
+    def get_milestone_values(self, milestone_type: str) -> list[str]:
+        """Get all milestone values of a type, in document order.
 
-        Returns an empty list on databases without a milestone table.
+        Args:
+            milestone_type: Milestone type to look up (e.g. "page", "marg")
+
+        Returns:
+            List of values in document order. Empty on databases without a
+            milestone table.
+
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
@@ -452,8 +466,9 @@ class Database:
 
         cursor = self.conn.execute(
             """SELECT value FROM milestone
-               WHERE type = 'page'
-               ORDER BY content_id, char_offset"""
+               WHERE type = ?
+               ORDER BY content_id, char_offset""",
+            (milestone_type,),
         )
         return [row["value"] for row in cursor.fetchall()]
 

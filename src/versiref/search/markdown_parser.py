@@ -5,9 +5,10 @@ from typing import Any
 import mistune
 from .models import BlockInfo, RawMilestone
 
-# Milestone markers: HTML comments of the form <!-- page: 204 --> or
-# <!-- scope: John 7:53-8:11 -->. Other HTML comments are left untouched.
-MILESTONE_RE = re.compile(r"<!--\s*(page|scope)\s*:\s*(.*?)\s*-->")
+# Milestone markers: HTML comments of the form <!-- page: 204 -->,
+# <!-- scope: John 7:53-8:11 -->, or <!-- marg: 667 -->. Other HTML comments
+# are left untouched.
+MILESTONE_RE = re.compile(r"<!--\s*(page|scope|marg)\s*:\s*(.*?)\s*-->")
 
 
 def extract_milestones(text: str) -> tuple[str, list[RawMilestone]]:
@@ -55,8 +56,8 @@ def extract_milestones(text: str) -> tuple[str, list[RawMilestone]]:
 def parse_markdown(markdown_text: str) -> list[BlockInfo]:
     """Parse Markdown text into block-level elements.
 
-    Milestone comments (``<!-- page: ... -->``, ``<!-- scope: ... -->``) are
-    stripped from block text and attached to the block as
+    Milestone comments (``<!-- page: ... -->``, ``<!-- scope: ... -->``,
+    ``<!-- marg: ... -->``) are stripped from block text and attached to the block as
     :class:`RawMilestone` entries. A block consisting only of milestone
     comments is dropped; its milestones attach to the next block at offset 0
     (or to the end of the last block if nothing follows).

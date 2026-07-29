@@ -51,9 +51,9 @@ class RawMilestone:
     """A milestone marker extracted from the Markdown source.
 
     Attributes:
-        type: Milestone type ("page" or "scope")
+        type: Milestone type ("page", "scope", or "marg")
         value: Milestone value (e.g., "204" for a page, "John 7:53-8:11" or
-            "end" for a scope)
+            "end" for a scope, "667" or "667a" for a marginal number)
         offset: Character offset in the block's *stripped* text where the
             marker fell
 
@@ -82,6 +82,26 @@ class BlockInfo:
     milestones: list[RawMilestone] = field(default_factory=list)
 
 
+def _milestone_annotations(page: str | None, marg: str | None) -> list[str]:
+    """Build ``"key value"`` display annotations for the milestones in effect."""
+    annotations = []
+    if page is not None:
+        annotations.append(f"page {page}")
+    if marg is not None:
+        annotations.append(f"marg {marg}")
+    return annotations
+
+
+def _milestone_xml_attrs(page: str | None, marg: str | None) -> str:
+    """Build XML attributes for the milestones in effect (e.g. ``page="204"``)."""
+    attrs = ""
+    if page is not None:
+        attrs += f' page="{page}"'
+    if marg is not None:
+        attrs += f' marg="{marg}"'
+    return attrs
+
+
 @dataclass
 class SearchResult:
     """Result of a search query.
@@ -93,6 +113,8 @@ class SearchResult:
         heading_context: Dictionary mapping heading levels to BlockInfo for context
         page: Page value in effect at the block, or None if the database has
             no page milestone before it
+        marg: Marginal-number value in effect at the block, or None if the
+            database has no marg milestone before it
 
     """
 
@@ -100,6 +122,7 @@ class SearchResult:
     block_text: str
     heading_context: dict[int, BlockInfo]
     page: str | None = None
+    marg: str | None = None
 
     def format_for_display(self, show_headings: bool = True) -> str:
         """Format the search result for terminal display.
@@ -124,11 +147,10 @@ class SearchResult:
         if lines:
             lines.append("")
 
-        # Add the content block with ID (and page, if known)
-        if self.page is not None:
-            lines.append(f"[Block {self.block_id}, page {self.page}]")
-        else:
-            lines.append(f"[Block {self.block_id}]")
+        # Add the content block with ID (and page/marg, if known)
+        annotations = _milestone_annotations(self.page, self.marg)
+        suffix = f", {', '.join(annotations)}" if annotations else ""
+        lines.append(f"[Block {self.block_id}{suffix}]")
         lines.append(self.block_text)
 
         return "\n".join(lines)
@@ -153,10 +175,8 @@ class SearchResult:
                 lines.append(heading.text.strip())
                 lines.append("</block>")
 
-        if self.page is not None:
-            lines.append(f'<block n="{self.block_id}" page="{self.page}">')
-        else:
-            lines.append(f'<block n="{self.block_id}">')
+        attrs = _milestone_xml_attrs(self.page, self.marg)
+        lines.append(f'<block n="{self.block_id}"{attrs}>')
         lines.append(self.block_text)
         lines.append("</block>")
         lines.append("</result>")
@@ -178,6 +198,7 @@ class ScopeResult:
         block_text: Markdown text of the span's opening block
         heading_context: Dictionary mapping heading levels to BlockInfo for context
         page: Page value in effect at the span's start, or None
+        marg: Marginal-number value in effect at the span's start, or None
 
     """
 
@@ -186,6 +207,7 @@ class ScopeResult:
     block_text: str
     heading_context: dict[int, BlockInfo]
     page: str | None = None
+    marg: str | None = None
 
     def format_for_display(self, show_headings: bool = True) -> str:
         """Format the scope result for terminal display.
@@ -207,12 +229,9 @@ class ScopeResult:
         if lines:
             lines.append("")
 
-        if self.page is not None:
-            lines.append(
-                f"[Blocks {self.block_start}-{self.block_end}, page {self.page}]"
-            )
-        else:
-            lines.append(f"[Blocks {self.block_start}-{self.block_end}]")
+        annotations = _milestone_annotations(self.page, self.marg)
+        suffix = f", {', '.join(annotations)}" if annotations else ""
+        lines.append(f"[Blocks {self.block_start}-{self.block_end}{suffix}]")
         lines.append(self.block_text)
 
         return "\n".join(lines)
@@ -237,8 +256,7 @@ class ScopeResult:
                 lines.append("</block>")
 
         attrs = f'start="{self.block_start}" end="{self.block_end}"'
-        if self.page is not None:
-            attrs += f' page="{self.page}"'
+        attrs += _milestone_xml_attrs(self.page, self.marg)
         lines.append(f"<scope {attrs}>")
         lines.append(self.block_text)
         lines.append("</scope>")

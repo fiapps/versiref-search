@@ -373,56 +373,71 @@ def db_with_blocks(db):
     return db
 
 
-def test_get_page_for_block_before_any_milestone(db_with_blocks):
+def test_get_milestone_for_block_before_any_milestone(db_with_blocks):
     db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
-    assert db_with_blocks.get_page_for_block(1) is None
+    assert db_with_blocks.get_milestone_for_block(1, "page") is None
 
 
-def test_get_page_for_block_at_and_after_milestone(db_with_blocks):
+def test_get_milestone_for_block_at_and_after_milestone(db_with_blocks):
     db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
-    assert db_with_blocks.get_page_for_block(2) == "53"
-    assert db_with_blocks.get_page_for_block(4) == "53"
+    assert db_with_blocks.get_milestone_for_block(2, "page") == "53"
+    assert db_with_blocks.get_milestone_for_block(4, "page") == "53"
 
 
-def test_get_page_for_block_sparse_reports_latest_recorded(db_with_blocks):
+def test_get_milestone_for_block_sparse_reports_latest_recorded(db_with_blocks):
     # Sparse page numbers: the latest *recorded* page is reported.
     db_with_blocks.insert_milestone("page", "53", content_id=1, char_offset=0)
     db_with_blocks.insert_milestone("page", "82", content_id=4, char_offset=0)
-    assert db_with_blocks.get_page_for_block(3) == "53"
-    assert db_with_blocks.get_page_for_block(4) == "82"
+    assert db_with_blocks.get_milestone_for_block(3, "page") == "53"
+    assert db_with_blocks.get_milestone_for_block(4, "page") == "82"
 
 
-def test_get_page_for_block_mid_block_offset(db_with_blocks):
+def test_get_milestone_for_block_mid_block_offset(db_with_blocks):
     db_with_blocks.insert_milestone("page", "10", content_id=2, char_offset=8)
     # At the block's start the break has not happened yet.
-    assert db_with_blocks.get_page_for_block(2) is None
-    assert db_with_blocks.get_page_for_block(2, char_offset=8) == "10"
-    assert db_with_blocks.get_page_for_block(3) == "10"
+    assert db_with_blocks.get_milestone_for_block(2, "page") is None
+    assert db_with_blocks.get_milestone_for_block(2, "page", char_offset=8) == "10"
+    assert db_with_blocks.get_milestone_for_block(3, "page") == "10"
 
 
-def test_get_page_range_spans_to_next_milestone(db_with_blocks):
+def test_get_milestone_for_block_different_types_are_independent(db_with_blocks):
+    db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
+    db_with_blocks.insert_milestone("marg", "667", content_id=3, char_offset=0)
+    assert db_with_blocks.get_milestone_for_block(3, "page") == "53"
+    assert db_with_blocks.get_milestone_for_block(3, "marg") == "667"
+    assert db_with_blocks.get_milestone_for_block(2, "marg") is None
+
+
+def test_get_milestone_range_spans_to_next_milestone(db_with_blocks):
     db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
     db_with_blocks.insert_milestone("page", "54", content_id=4, char_offset=5)
     # Page 53 runs from its own block through the block holding the next
     # break (the break falls mid-block, so block 4 belongs to both pages).
-    assert db_with_blocks.get_page_range("53") == (2, 4)
+    assert db_with_blocks.get_milestone_range("page", "53") == (2, 4)
 
 
-def test_get_page_range_last_page_runs_to_end(db_with_blocks):
+def test_get_milestone_range_last_one_runs_to_end(db_with_blocks):
     db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
-    assert db_with_blocks.get_page_range("53") == (2, 4)
+    assert db_with_blocks.get_milestone_range("page", "53") == (2, 4)
 
 
-def test_get_page_range_missing_value(db_with_blocks):
+def test_get_milestone_range_missing_value(db_with_blocks):
     db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
-    assert db_with_blocks.get_page_range("54") is None
+    assert db_with_blocks.get_milestone_range("page", "54") is None
 
 
-def test_get_page_values_in_document_order(db_with_blocks):
+def test_get_milestone_range_for_marg(db_with_blocks):
+    db_with_blocks.insert_milestone("marg", "667", content_id=2, char_offset=0)
+    db_with_blocks.insert_milestone("marg", "668", content_id=4, char_offset=0)
+    assert db_with_blocks.get_milestone_range("marg", "667") == (2, 4)
+
+
+def test_get_milestone_values_in_document_order(db_with_blocks):
     db_with_blocks.insert_milestone("page", "xvii", content_id=1, char_offset=0)
     db_with_blocks.insert_milestone("page", "1", content_id=2, char_offset=0)
     db_with_blocks.insert_milestone("page", "2", content_id=3, char_offset=0)
-    assert db_with_blocks.get_page_values() == ["xvii", "1", "2"]
+    assert db_with_blocks.get_milestone_values("page") == ["xvii", "1", "2"]
+    assert db_with_blocks.get_milestone_values("marg") == []
 
 
 def test_count_milestones(db_with_blocks):
@@ -462,10 +477,10 @@ def legacy_db(db_with_blocks):
     return db_with_blocks
 
 
-def test_legacy_db_page_queries_return_empty(legacy_db):
-    assert legacy_db.get_page_for_block(1) is None
-    assert legacy_db.get_page_range("53") is None
-    assert legacy_db.get_page_values() == []
+def test_legacy_db_milestone_queries_return_empty(legacy_db):
+    assert legacy_db.get_milestone_for_block(1, "page") is None
+    assert legacy_db.get_milestone_range("page", "53") is None
+    assert legacy_db.get_milestone_values("page") == []
     assert legacy_db.count_milestones() == 0
 
 

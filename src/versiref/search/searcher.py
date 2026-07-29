@@ -235,7 +235,8 @@ def search_database(
                     block_id=content_id,
                     block_text=block_text,
                     heading_context=heading_context,
-                    page=db.get_page_for_block(content_id),
+                    page=db.get_milestone_for_block(content_id, "page"),
+                    marg=db.get_milestone_for_block(content_id, "marg"),
                 )
             )
 
@@ -332,11 +333,79 @@ def search_commentary(
                     block_end=block_end,
                     block_text=block_text,
                     heading_context=heading_context,
-                    page=db.get_page_for_block(block_start),
+                    page=db.get_milestone_for_block(block_start, "page"),
+                    marg=db.get_milestone_for_block(block_start, "marg"),
                 )
             )
 
         return results
+
+
+def _get_milestone_context(
+    db: Database,
+    milestone_type: str,
+    value: str,
+    noun: str,
+    include_headings: bool,
+    max_blocks: int,
+) -> list[BlockInfo]:
+    """Get the content blocks covered by a milestone value.
+
+    Shared by :func:`get_page_context` and :func:`get_marg_context`: looks up
+    the milestone of ``milestone_type`` with the given value and returns the
+    blocks from it through the next milestone of the same type (inclusive at
+    both ends, since a marker can fall mid-block). With sparse milestones the
+    span covers everything up to the next *recorded* one, which may be several
+    pages/passages away; the ``max_blocks`` guard refuses runaway spans.
+
+    Args:
+        db: Open, schema-validated database
+        milestone_type: Milestone type to look up (e.g. "page", "marg")
+        value: Milestone value to look up (exact match)
+        noun: Singular noun for this milestone type, used in error messages
+            (e.g. "page", "marg value")
+        include_headings: Whether to include preceding headings before the span
+        max_blocks: Maximum number of blocks before refusing
+
+    Returns:
+        List of BlockInfo objects in document order
+
+    Raises:
+        ValueError: If the database has no milestones of this type, or none
+            with this value (the message lists nearby recorded values)
+        SectionTooLargeError: If the span exceeds max_blocks
+
+    """
+    span = db.get_milestone_range(milestone_type, value)
+    if span is None:
+        values = db.get_milestone_values(milestone_type)
+        if not values:
+            raise ValueError(f"Database has no {noun} milestones")
+        raise ValueError(
+            f"No {noun} milestone '{value}'; "
+            f"{_nearby_milestone_hint(value, values, noun)}"
+        )
+    start_id, end_id = span
+
+    count = db.count_content_range(start_id, end_id)
+    if count > max_blocks:
+        raise SectionTooLargeError(count, max_blocks)
+
+    blocks: list[BlockInfo] = []
+    if include_headings:
+        headings = db.get_all_preceding_headings(start_id)
+        for level in sorted(headings.keys()):
+            heading_id, heading_text = headings[level]
+            blocks.append(
+                BlockInfo(id=heading_id, text=heading_text, heading_level=level)
+            )
+
+    for block_id, block_text, heading_level in db.get_content_range(start_id, end_id):
+        blocks.append(
+            BlockInfo(id=block_id, text=block_text, heading_level=heading_level)
+        )
+
+    return blocks
 
 
 def get_page_context(
@@ -378,38 +447,59 @@ def get_page_context(
 
     with Database(db_path) as db:
         db.validate_schema()
+        return _get_milestone_context(
+            db, "page", page, "page", include_headings, max_blocks
+        )
 
-        span = db.get_page_range(page)
-        if span is None:
-            values = db.get_page_values()
-            if not values:
-                raise ValueError("Database has no page milestones")
-            raise ValueError(
-                f"No page milestone '{page}'; {_nearby_pages_hint(page, values)}"
-            )
-        start_id, end_id = span
 
-        count = db.count_content_range(start_id, end_id)
-        if count > max_blocks:
-            raise SectionTooLargeError(count, max_blocks)
+def get_marg_context(
+    db_path: str | Path,
+    marg: str,
+    include_headings: bool = True,
+    max_blocks: int = DEFAULT_MAX_SECTION_BLOCKS,
+) -> list[BlockInfo]:
+    """Get the content blocks of a marginal-number-identified passage.
 
-        blocks: list[BlockInfo] = []
-        if include_headings:
-            headings = db.get_all_preceding_headings(start_id)
-            for level in sorted(headings.keys()):
-                heading_id, heading_text = headings[level]
-                blocks.append(
-                    BlockInfo(id=heading_id, text=heading_text, heading_level=level)
-                )
+    Looks up the ``marg`` milestone with the given value and returns the
+    blocks from it through the next marg milestone (inclusive at both ends,
+    since a marker can fall mid-block). With sparse marg milestones the span
+    covers everything up to the next *recorded* value, which may skip several
+    unrecorded numbers; the ``max_blocks`` guard refuses runaway spans.
 
-        for block_id, block_text, heading_level in db.get_content_range(
-            start_id, end_id
-        ):
-            blocks.append(
-                BlockInfo(id=block_id, text=block_text, heading_level=heading_level)
-            )
+    Marginal numbers that some editions insert with a trailing letter (e.g.
+    Jurgens's "652a", "652b" between Rouet's "652" and "653") are ordinary
+    values — they are looked up by exact match like any other — but the
+    sub-ordinal ordering the letter implies matters for the "nearby recorded
+    values" hint on a miss (see :func:`_milestone_sort_key`).
 
-        return blocks
+    Args:
+        db_path: Path to SQLite database file
+        marg: Marginal-number value to look up (exact match, e.g. "652" or
+            "652a")
+        include_headings: Whether to include preceding headings before the span
+        max_blocks: Maximum number of blocks before refusing
+
+    Returns:
+        List of BlockInfo objects in document order
+
+    Raises:
+        FileNotFoundError: If database doesn't exist
+        IncompatibleDatabaseError: If the database is not a compatible
+            versiref-search index
+        ValueError: If the database has no marg milestones or no milestone
+            with this value (the message lists nearby recorded values)
+        SectionTooLargeError: If the span exceeds max_blocks
+
+    """
+    db_path = Path(db_path)
+    if not db_path.exists():
+        raise FileNotFoundError(f"Database not found: {db_path}")
+
+    with Database(db_path) as db:
+        db.validate_schema()
+        return _get_milestone_context(
+            db, "marg", marg, "marg value", include_headings, max_blocks
+        )
 
 
 # Well-formed Roman numeral (subtractive notation), either case.
@@ -435,18 +525,43 @@ def _roman_to_int(s: str) -> int:
     return total
 
 
-def _page_sort_key(value: str) -> tuple[tuple[int, int], ...] | None:
-    """Build a comparison key for a page value, or None if not comparable.
+def _milestone_sort_key(value: str) -> tuple[tuple[int, int], ...] | None:
+    """Build a comparison key for a milestone value, or None if not comparable.
 
     The value is split into numeric components ("2:84" -> 2, 84), which
     compare component-wise, so volume:page style values order naturally.
     A component is either an Arabic number or a Roman numeral; all Roman
     numerals compare less than all integers (front matter precedes the body).
+
+    A trailing run of one repeated letter directly after a numeric component
+    is treated as a sub-ordinal rather than a component of its own, so a
+    passage some editions insert with a letter suffix sorts correctly between
+    the base number and the next one, without needing to be recorded to
+    compare. Jurgens's translation of the Enchiridion Patristicum, for
+    example, inserts passages between Rouet's numbers this way ("652",
+    "652a", "652b", "653"), and when a run is long enough to exhaust the
+    alphabet it continues by doubling the letter rather than restarting at
+    "aa", "ab", "ac", ... — Rouet's "651" to "652" holds "651a" through
+    "651z", then "651aa", "651bb", "651cc", "651dd" — so the sub-ordinal
+    value is ``(repeat_count - 1) * 26 + letter_position``.
+
     Values with any other component (e.g. "A-3") are not comparable.
     """
     parts = re.findall(r"[0-9]+|[a-zA-Z]+", value)
     if not parts:
         return None
+
+    sub_ordinal: int | None = None
+    if (
+        len(parts) >= 2
+        and parts[-2].isdigit()
+        and parts[-1].isalpha()
+        and len(set(parts[-1].lower())) == 1
+    ):
+        letter_run = parts[-1].lower()
+        sub_ordinal = (len(letter_run) - 1) * 26 + (ord(letter_run[0]) - ord("a") + 1)
+        parts = parts[:-1]
+
     key = []
     for part in parts:
         if part.isdigit():
@@ -455,22 +570,30 @@ def _page_sort_key(value: str) -> tuple[tuple[int, int], ...] | None:
             key.append((0, _roman_to_int(part)))
         else:
             return None
+    if sub_ordinal is not None:
+        key.append((2, sub_ordinal))
     return tuple(key)
 
 
-def _nearby_pages_hint(page: str, values: list[str]) -> str:
-    """Build a hint naming the recorded pages around a missing page value.
+def _nearby_milestone_hint(value: str, values: list[str], noun: str) -> str:
+    """Build a hint naming the recorded values around a missing milestone value.
 
-    With sparse page milestones the requested page may fall between two
-    recorded ones; when the values are comparable (see
-    :func:`_page_sort_key`), say so. Recorded values that are not comparable
-    are skipped; if the query itself is not comparable, fall back to the
-    recorded range.
+    With sparse milestones the requested value may fall between two recorded
+    ones; when the values are comparable (see :func:`_milestone_sort_key`),
+    say so. Recorded values that are not comparable are skipped; if the query
+    itself is not comparable, fall back to the recorded range.
+
+    Args:
+        value: The milestone value that was not found
+        values: All recorded values of this milestone type, in document order
+        noun: Singular noun for this milestone type (e.g. "page", "marg
+            value"); pluralized by appending "s"
+
     """
-    target = _page_sort_key(page)
-    keyed = [(k, v) for v in values if (k := _page_sort_key(v)) is not None]
+    target = _milestone_sort_key(value)
+    keyed = [(k, v) for v in values if (k := _milestone_sort_key(v)) is not None]
     if target is None or not keyed:
-        return f"recorded pages run from '{values[0]}' to '{values[-1]}'"
+        return f"recorded {noun}s run from '{values[0]}' to '{values[-1]}'"
 
     equal = next((v for k, v in keyed if k == target), None)
     if equal is not None:
@@ -480,14 +603,14 @@ def _nearby_pages_hint(page: str, values: list[str]) -> str:
     above = min((kv for kv in keyed if kv[0] > target), default=None)
     if below and above:
         return (
-            f"it falls between recorded pages '{below[1]}' and '{above[1]}' "
+            f"it falls between recorded {noun}s '{below[1]}' and '{above[1]}' "
             f"(try one of those)"
         )
     if below:
-        return f"the last recorded page is '{below[1]}'"
+        return f"the last recorded {noun} is '{below[1]}'"
     if above:
-        return f"the first recorded page is '{above[1]}'"
-    return f"recorded pages run from '{values[0]}' to '{values[-1]}'"
+        return f"the first recorded {noun} is '{above[1]}'"
+    return f"recorded {noun}s run from '{values[0]}' to '{values[-1]}'"
 
 
 def get_toc(

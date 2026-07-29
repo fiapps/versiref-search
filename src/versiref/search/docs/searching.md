@@ -38,6 +38,7 @@ Each result includes:
 - **Block text**: the Markdown content of the matched block. Matches are wrapped in `<mark>` tags — matched words for string searches, and cited references for reference searches. When a block is matched by both a string and a reference query, only the string matches are highlighted (see [Highlighting](#highlighting) below).
 - **Block ID**: a sequential identifier that can be used with the `show` command to retrieve surrounding content.
 - **Page**: when the database was indexed with page milestones, the page of the printed edition the block falls on (e.g., `[Block 42, page 204]`, or `page="204"` in XML output). With sparse page milestones this is the most recent *recorded* page before the block.
+- **Marg**: when the database was indexed with marg milestones, the marginal number of the block (e.g., `[Block 42, marg 652]`, or `marg="652"` in XML output). With sparse marg milestones this is the most recent *recorded* value before the block. Both page and marg appear together when the database has both (e.g., `[Block 42, page 204, marg 652]`).
 
 ### Plain Text Output
 
@@ -218,6 +219,17 @@ Page values compare naturally for this purpose: multi-part values like `2:84` (v
 With sparse milestones a "page" can span many blocks (everything up to the next recorded break), so the `--max-blocks` guard applies here as it does for sections.
 `--page` cannot be combined with the other `show` modes.
 
+### Retrieving a Marginal-Number Passage
+
+For databases indexed with marg milestones, `--marg` retrieves the blocks of a marginal-number passage:
+
+```sh
+versiref-search show mybook.db --marg 652
+```
+
+This works exactly like `--page` (same inclusive-span, sparse-milestone, and `--max-blocks` behavior; `--marg` cannot be combined with the other `show` modes), except the milestone type queried is `marg` instead of `page`.
+Values with a trailing letter (e.g. `652a`, inserted between `652` and `653` in editions that do so) are looked up like any other value and sort correctly relative to their base number for the "nearby recorded values" hint on a miss, including runs long enough to continue past `z` by doubling the letter (`aa`, `bb`, `cc`, …) instead of restarting at `aa`, `ab`, `ac`, ….
+
 ## Table of Contents
 
 To survey a database's heading structure, use the `toc` command:
@@ -300,6 +312,7 @@ Databases with milestones or commentary scopes also report those counts.
 | `--section` | Retrieve a whole section at this heading level (1–6) |
 | `--heading` | Select a section by matching its heading text (use with `--section`) |
 | `--page` | Retrieve the blocks of a printed page (requires page milestones) |
+| `--marg` | Retrieve the blocks of a marginal-number passage (requires marg milestones) |
 | `--max-blocks` | Refuse to return a section larger than this many blocks (default: 200) |
 | `--include-headings` | Include the headings above the range/section |
 
@@ -310,5 +323,5 @@ No additional options.
 
 ## Python API
 
-The `versiref.search` package exports `search_database`, `search_commentary`, `get_context`, `get_page_context`, `get_section_by_block`, `get_section_by_heading`, and `get_index_stats` for programmatic use.
+The `versiref.search` package exports `search_database`, `search_commentary`, `get_context`, `get_page_context`, `get_marg_context`, `get_section_by_block`, `get_section_by_heading`, and `get_index_stats` for programmatic use.
 See their docstrings for full parameter documentation.
