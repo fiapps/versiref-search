@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- List items written without blank lines between them ("tight" lists) are now indexed. Previously they were dropped in silence, taking with them their text, the Bible references they cited, and any page, marg, or scope milestone they contained; only the block and reference counts hinted that anything was missing. This bit documents converted from PDF, where numbered excerpts and hanging-indent bibliography entries routinely come out as list items. Databases built with an earlier version should be re-indexed to pick up the missing material.
+- Markdown that the parser does not recognize now contributes its text to the index instead of being discarded — formatting fidelity may suffer, but content is never lost — and anything still skipped is reported as a warning at index time rather than passing unnoticed.
+
 ## 0.9.0 - 2026-07-29
 
 ### Added

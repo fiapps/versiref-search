@@ -1,14 +1,37 @@
 """Markdown parsing for versiref-search."""
 
+import logging
 import re
 from typing import Any
 import mistune
 from .models import BlockInfo, RawMilestone
 
+logger = logging.getLogger(__name__)
+
 # Milestone markers: HTML comments of the form <!-- page: 204 -->,
 # <!-- scope: John 7:53-8:11 -->, or <!-- marg: 667 -->. Other HTML comments
 # are left untouched.
 MILESTONE_RE = re.compile(r"<!--\s*(page|scope|marg)\s*:\s*(.*?)\s*-->")
+
+# Block-level token types this module reconstructs explicitly. Used to tell a
+# container of blocks from a container of inline elements when falling back on
+# an unrecognized token.
+BLOCK_TOKEN_TYPES = frozenset(
+    {
+        "heading",
+        "paragraph",
+        "block_text",
+        "block_quote",
+        "list",
+        "list_item",
+        "block_code",
+        "thematic_break",
+        "block_html",
+    }
+)
+
+# Token types that carry no document text and are dropped without comment.
+EMPTY_TOKEN_TYPES = frozenset({"blank_line", "linebreak", "softbreak"})
 
 
 def extract_milestones(text: str) -> tuple[str, list[RawMilestone]]:
@@ -138,8 +161,9 @@ def _extract_block(
             heading_text = f"{'#' * level} {text}"
             return heading_text, level
 
-    # Paragraph
-    elif token_type == "paragraph":
+    # Paragraph. ``block_text`` is what mistune gives a tight list item's
+    # content in place of a paragraph; it holds the same inline children.
+    elif token_type in ("paragraph", "block_text"):
         text = _extract_inline_text(token.get("children", []))
         if text:
             return text, None
@@ -177,6 +201,31 @@ def _extract_block(
     # Block HTML
     elif token_type == "block_html":
         return token.get("raw", ""), None
+
+    # Anything else: recover the text rather than dropping it, so an
+    # unanticipated token type costs formatting fidelity but never content.
+    else:
+        children = token.get("children") or []
+        if any(child.get("type") in BLOCK_TOKEN_TYPES for child in children):
+            parts = []
+            for child in children:
+                child_text, _ = _extract_block(child, source_text)
+                if child_text:
+                    parts.append(child_text)
+            if parts:
+                return "\n".join(parts), None
+        elif children:
+            text = _extract_inline_text(children)
+            if text:
+                return text, None
+        elif token.get("raw"):
+            return token["raw"], None
+        if token_type not in EMPTY_TOKEN_TYPES:
+            logger.warning(
+                "Skipping Markdown token of unhandled type '%s'; "
+                "any text it contained is not indexed.",
+                token_type,
+            )
 
     return None, None
 
@@ -270,7 +319,7 @@ def _extract_list_text(token: dict[str, Any]) -> str:
     elif token_type == "list_item":
         parts = []
         for child in token.get("children", []):
-            if child.get("type") == "paragraph":
+            if child.get("type") in ("paragraph", "block_text"):
                 text = _extract_inline_text(child.get("children", []))
                 if text:
                     parts.append(text)

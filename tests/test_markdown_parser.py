@@ -1,6 +1,10 @@
 """Tests for the Markdown parser."""
 
-from versiref.search.markdown_parser import extract_milestones, parse_markdown
+from versiref.search.markdown_parser import (
+    _extract_block,
+    extract_milestones,
+    parse_markdown,
+)
 from versiref.search.models import RawMilestone
 
 
@@ -74,7 +78,7 @@ def test_blockquote():
 
 
 def test_unordered_list():
-    # Loose list (blank lines between items) ensures paragraph children that the parser extracts
+    # Loose list (blank lines between items) gives the items paragraph children
     blocks = parse_markdown("- Item one\n\n- Item two\n")
     assert len(blocks) == 1
     assert "Item one" in blocks[0].text
@@ -86,6 +90,77 @@ def test_ordered_list():
     assert len(blocks) == 1
     assert "First" in blocks[0].text
     assert "Second" in blocks[0].text
+
+
+def test_tight_unordered_list():
+    """Tight list items give block_text children and must still be indexed."""
+    blocks = parse_markdown("- Item one\n- Item two\n")
+    assert len(blocks) == 1
+    assert "Item one" in blocks[0].text
+    assert "Item two" in blocks[0].text
+
+
+def test_tight_ordered_list():
+    blocks = parse_markdown("1. First cites Lk 1:28.\n2. Second cites Rom 5:20.\n")
+    assert len(blocks) == 1
+    assert "Lk 1:28" in blocks[0].text
+    assert "Rom 5:20" in blocks[0].text
+
+
+def test_tight_list_surrounded_by_paragraphs():
+    """A tight list is its own block and does not displace its neighbors."""
+    blocks = parse_markdown("Before.\n\n- Item one\n- Item two\n\nAfter.\n")
+    assert [b.text for b in blocks] == ["Before.", "- Item one\n- Item two", "After."]
+
+
+def test_nested_tight_list():
+    blocks = parse_markdown("- Outer\n  - Inner\n")
+    assert len(blocks) == 1
+    assert "Outer" in blocks[0].text
+    assert "Inner" in blocks[0].text
+
+
+def test_milestone_inside_tight_list_item():
+    """A milestone in a tight list item survives with an offset into the item."""
+    blocks = parse_markdown("1. Citing <!-- page: 7 --> John 1:14.\n")
+    assert len(blocks) == 1
+    assert blocks[0].text == "1. Citing John 1:14."
+    assert blocks[0].milestones == [RawMilestone(type="page", value="7", offset=10)]
+    assert blocks[0].text[10:].startswith("John")
+
+
+def test_unhandled_token_with_inline_children_recovers_text():
+    """An unanticipated token type yields its text rather than being dropped."""
+    token = {"type": "future_block", "children": [{"type": "text", "raw": "Lk 1:28"}]}
+    assert _extract_block(token, "") == ("Lk 1:28", None)
+
+
+def test_unhandled_token_with_block_children_recovers_text():
+    token = {
+        "type": "future_container",
+        "children": [
+            {"type": "paragraph", "children": [{"type": "text", "raw": "One"}]},
+            {"type": "paragraph", "children": [{"type": "text", "raw": "Two"}]},
+        ],
+    }
+    assert _extract_block(token, "") == ("One\nTwo", None)
+
+
+def test_unhandled_token_with_only_raw_recovers_text():
+    assert _extract_block({"type": "future_raw", "raw": "Lk 1:28"}, "") == (
+        "Lk 1:28",
+        None,
+    )
+
+
+def test_textless_token_is_dropped_with_a_warning(caplog):
+    assert _extract_block({"type": "future_empty"}, "") == (None, None)
+    assert "future_empty" in caplog.text
+
+
+def test_blank_line_token_is_dropped_silently(caplog):
+    assert _extract_block({"type": "blank_line"}, "") == (None, None)
+    assert caplog.text == ""
 
 
 def test_bible_reference_text_preserved():
