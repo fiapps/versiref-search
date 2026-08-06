@@ -560,6 +560,54 @@ def test_search_results_carry_page(paged_search_db, ref_style):
     assert results[0].page == "53"
 
 
+@pytest.fixture
+def mid_block_page_db(tmp_path, ref_style):
+    """Database whose page changes partway through a paragraph."""
+    content = (
+        "# Chapter One\n\n"
+        "<!-- page: 53 -->\n\n"
+        "Opening words citing Ps 45:10 and <!-- page: 54 --> closing words.\n"
+    )
+    md = tmp_path / "midpage.md"
+    md.write_text(content, encoding="utf-8")
+    db = tmp_path / "midpage.db"
+    index_document(
+        input_path=md,
+        output_path=db,
+        metadata={"title": "Mid-page", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    return db
+
+
+def test_search_result_reports_page_range_and_marker(mid_block_page_db, ref_style):
+    results = search_database(mid_block_page_db, ref_style, reference_query="Ps 45:10")
+    assert len(results) == 1
+    assert (results[0].page, results[0].page_end) == ("53", "54")
+    assert "and <!-- page: 54 --> closing words." in results[0].block_text
+    assert "[Block 2, pages 53-54]" in results[0].format_for_display()
+
+
+def test_search_result_marker_survives_string_highlighting(
+    mid_block_page_db, ref_style
+):
+    results = search_database(
+        mid_block_page_db, ref_style, string_query='"and closing words"'
+    )
+    assert len(results) == 1
+    assert "<mark>and <!-- page: 54 --> closing words</mark>" in results[0].block_text
+
+
+def test_show_blocks_carry_milestone_markers(mid_block_page_db):
+    blocks = get_page_context(mid_block_page_db, "53", include_headings=False)
+    body = next(b for b in blocks if "Opening words" in b.text)
+    assert "<!-- page: 54 -->" in body.text
+    assert [(m.type, m.value) for m in body.milestones] == [
+        ("page", "53"),
+        ("page", "54"),
+    ]
+
+
 def test_search_results_page_none_before_first_milestone(paged_search_db, ref_style):
     results = search_database(paged_search_db, ref_style, reference_query="Lk 1:28")
     assert len(results) == 1
@@ -731,6 +779,31 @@ def test_search_commentary_includes_heading_context(commentary_search_db, ref_st
     results = search_commentary(commentary_search_db, ref_style, "Jn 8:7")
     context_texts = [b.text for b in results[0].heading_context.values()]
     assert any("Pericope Adulterae" in t for t in context_texts)
+
+
+def test_search_commentary_reports_page_range_over_span(tmp_path, ref_style):
+    content = (
+        "# Commentary\n\n"
+        "<!-- page: 12 -->\n\n"
+        "## On Jn 8:7\n\n"
+        "Comment about casting the first stone.\n\n"
+        "<!-- page: 13 -->\n\n"
+        "The comment continues.\n"
+    )
+    md = tmp_path / "paged-commentary.md"
+    md.write_text(content, encoding="utf-8")
+    db = tmp_path / "paged-commentary.db"
+    index_document(
+        input_path=md,
+        output_path=db,
+        metadata={"title": "Paged commentary", "versification": "eng"},
+        ref_style=ref_style,
+        commentary_headings=True,
+    )
+
+    results = search_commentary(db, ref_style, "Jn 8:7")
+    assert len(results) == 1
+    assert (results[0].page, results[0].page_end) == ("12", "13")
 
 
 def test_search_commentary_no_scopes(indexed_db, ref_style):

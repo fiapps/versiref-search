@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- A block that a page break or marginal number falls inside now reports a range — `[Block 42, pages 204-205]`, `page="204" page_end="205"` in XML — instead of only the value it starts with, and the block text shows the `<!-- page: 205 -->` marker at the point where the value changes. Previously nothing distinguished a quotation from the tail of such a block from one on the page the block opens on, so a page number cited from a search result could be off by one. Marker positions are recorded to the character, so they survive the `<mark>` highlighting of a string search, and `show` output carries them too.
+
 ### Fixed
 
 - List items written without blank lines between them ("tight" lists) are now indexed. Previously they were dropped in silence, taking with them their text, the Bible references they cited, and any page, marg, or scope milestone they contained; only the block and reference counts hinted that anything was missing. This bit documents converted from PDF, where numbered excerpts and hanging-indent bibliography entries routinely come out as list items. Databases built with an earlier version should be re-indexed to pick up the missing material.

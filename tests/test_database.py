@@ -440,6 +440,38 @@ def test_get_milestone_values_in_document_order(db_with_blocks):
     assert db_with_blocks.get_milestone_values("marg") == []
 
 
+def test_get_milestones_in_range_groups_by_block(db_with_blocks):
+    db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
+    db_with_blocks.insert_milestone("page", "54", content_id=2, char_offset=8)
+    db_with_blocks.insert_milestone("marg", "667", content_id=3, char_offset=0)
+    db_with_blocks.insert_milestone("page", "55", content_id=4, char_offset=0)
+
+    found = db_with_blocks.get_milestones_in_range(2, 3)
+    assert list(found) == [2, 3]
+    assert [(m.type, m.value, m.offset) for m in found[2]] == [
+        ("page", "53", 0),
+        ("page", "54", 8),
+    ]
+    assert [(m.type, m.value) for m in found[3]] == [("marg", "667")]
+
+
+def test_get_milestones_in_range_filters_types(db_with_blocks):
+    db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
+    db_with_blocks.insert_milestone("marg", "667", content_id=2, char_offset=4)
+    found = db_with_blocks.get_milestones_in_range(1, 4, types=("marg",))
+    assert [m.value for m in found[2]] == ["667"]
+
+
+def test_get_last_milestone_in_range(db_with_blocks):
+    db_with_blocks.insert_milestone("page", "53", content_id=2, char_offset=0)
+    db_with_blocks.insert_milestone("page", "54", content_id=2, char_offset=8)
+    db_with_blocks.insert_milestone("page", "55", content_id=4, char_offset=0)
+    assert db_with_blocks.get_last_milestone_in_range("page", 1, 3) == "54"
+    assert db_with_blocks.get_last_milestone_in_range("page", 1, 4) == "55"
+    assert db_with_blocks.get_last_milestone_in_range("page", 1, 1) is None
+    assert db_with_blocks.get_last_milestone_in_range("marg", 1, 4) is None
+
+
 def test_count_milestones(db_with_blocks):
     assert db_with_blocks.count_milestones() == 0
     db_with_blocks.insert_milestone("page", "1", content_id=1, char_offset=0)
@@ -481,6 +513,8 @@ def test_legacy_db_milestone_queries_return_empty(legacy_db):
     assert legacy_db.get_milestone_for_block(1, "page") is None
     assert legacy_db.get_milestone_range("page", "53") is None
     assert legacy_db.get_milestone_values("page") == []
+    assert legacy_db.get_milestones_in_range(1, 4) == {}
+    assert legacy_db.get_last_milestone_in_range("page", 1, 4) is None
     assert legacy_db.count_milestones() == 0
 
 

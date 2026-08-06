@@ -4,6 +4,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from .models import RawMilestone
+
 # Identifies databases produced by this package, distinguishing them from
 # other versiref-ecosystem SQLite files (e.g. versiref-bible) that share the
 # "schema_version" key. Written to the metadata "format" key at index time.
@@ -392,6 +394,79 @@ class Database:
                ORDER BY content_id DESC, char_offset DESC
                LIMIT 1""",
             (milestone_type, content_id, content_id, char_offset),
+        )
+        row = cursor.fetchone()
+        return row["value"] if row else None
+
+    def get_milestones_in_range(
+        self, start_id: int, end_id: int, types: tuple[str, ...] = ("page", "marg")
+    ) -> dict[int, list[RawMilestone]]:
+        """Get the milestones falling inside a range of content blocks.
+
+        Unlike :meth:`get_milestone_for_block`, which reports the value in
+        effect at a position, this reports the markers themselves — including
+        those that fall mid-block, where the value in effect changes partway
+        through the text.
+
+        Args:
+            start_id: First content block ID (inclusive)
+            end_id: Last content block ID (inclusive)
+            types: Milestone types to include
+
+        Returns:
+            Mapping of content ID to its milestones in document order. Blocks
+            with no milestones are absent; empty on databases without a
+            milestone table.
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("milestone"):
+            return {}
+
+        placeholders = ", ".join("?" for _ in types)
+        cursor = self.conn.execute(
+            f"""SELECT type, value, content_id, char_offset FROM milestone
+                WHERE type IN ({placeholders})
+                  AND content_id BETWEEN ? AND ?
+                ORDER BY content_id, char_offset""",
+            (*types, start_id, end_id),
+        )
+        milestones: dict[int, list[RawMilestone]] = {}
+        for row in cursor.fetchall():
+            milestones.setdefault(row["content_id"], []).append(
+                RawMilestone(
+                    type=row["type"], value=row["value"], offset=row["char_offset"]
+                )
+            )
+        return milestones
+
+    def get_last_milestone_in_range(
+        self, milestone_type: str, start_id: int, end_id: int
+    ) -> str | None:
+        """Get the value of the last milestone of a type inside a block range.
+
+        Args:
+            milestone_type: Milestone type to look up (e.g. "page", "marg")
+            start_id: First content block ID (inclusive)
+            end_id: Last content block ID (inclusive)
+
+        Returns:
+            Milestone value, or None if the range holds no milestone of this
+            type (including databases without a milestone table).
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("milestone"):
+            return None
+
+        cursor = self.conn.execute(
+            """SELECT value FROM milestone
+               WHERE type = ? AND content_id BETWEEN ? AND ?
+               ORDER BY content_id DESC, char_offset DESC
+               LIMIT 1""",
+            (milestone_type, start_id, end_id),
         )
         row = cursor.fetchone()
         return row["value"] if row else None

@@ -6,7 +6,13 @@ from typing import Any
 from versiref import Versification, RefParser, RefStyle
 
 from .database import Database
-from .models import ScopeResult, SearchResult, BlockInfo
+from .models import (
+    BlockInfo,
+    RawMilestone,
+    ScopeResult,
+    SearchResult,
+    insert_milestone_markers,
+)
 
 DEFAULT_MAX_SECTION_BLOCKS = 200
 
@@ -60,6 +66,27 @@ def _wrap_reference_spans(text: str, spans: set[tuple[int, int]]) -> str:
     for start, end in reversed(merged):
         text = text[:start] + "<mark>" + text[start:end] + "</mark>" + text[end:]
     return text
+
+
+def _span_end(
+    milestones: list[RawMilestone], milestone_type: str, start_value: str | None
+) -> str | None:
+    """Report the value a milestone type ends on, when it changes over a span.
+
+    Args:
+        milestones: Milestones falling in the span, in document order
+        milestone_type: Milestone type to look for (e.g. "page", "marg")
+        start_value: The value in effect at the start of the span
+
+    Returns:
+        The last value of this type in the span, or None if the span records
+        none or ends on the value it started with.
+
+    """
+    values = [m.value for m in milestones if m.type == milestone_type]
+    if not values or values[-1] == start_value:
+        return None
+    return values[-1]
 
 
 def _parse_query_reference(
@@ -230,13 +257,25 @@ def search_database(
                         id=heading_id, text=heading_text, heading_level=level
                     )
 
+            # Milestones inside the block: restore their markers in the text
+            # and, where one changes the value partway through, report the
+            # block as spanning a range rather than a single page or number.
+            milestones = db.get_milestones_in_range(content_id, content_id).get(
+                content_id, []
+            )
+            block_text = insert_milestone_markers(block_text, milestones)
+            page = db.get_milestone_for_block(content_id, "page")
+            marg = db.get_milestone_for_block(content_id, "marg")
+
             search_results.append(
                 SearchResult(
                     block_id=content_id,
                     block_text=block_text,
                     heading_context=heading_context,
-                    page=db.get_milestone_for_block(content_id, "page"),
-                    marg=db.get_milestone_for_block(content_id, "marg"),
+                    page=page,
+                    marg=marg,
+                    page_end=_span_end(milestones, "page", page),
+                    marg_end=_span_end(milestones, "marg", marg),
                 )
             )
 
@@ -327,18 +366,54 @@ def search_commentary(
                         id=heading_id, text=heading_text, heading_level=level
                     )
 
+            opening_milestones = db.get_milestones_in_range(
+                block_start, block_start
+            ).get(block_start, [])
+            block_text = insert_milestone_markers(block_text, opening_milestones)
+
+            # The span's range covers every block in it, not just the opening
+            # one, so a scope running over a page break reports both pages.
+            page = db.get_milestone_for_block(block_start, "page")
+            marg = db.get_milestone_for_block(block_start, "marg")
+            page_last = db.get_last_milestone_in_range("page", block_start, block_end)
+            marg_last = db.get_last_milestone_in_range("marg", block_start, block_end)
+
             results.append(
                 ScopeResult(
                     block_start=block_start,
                     block_end=block_end,
                     block_text=block_text,
                     heading_context=heading_context,
-                    page=db.get_milestone_for_block(block_start, "page"),
-                    marg=db.get_milestone_for_block(block_start, "marg"),
+                    page=page,
+                    marg=marg,
+                    page_end=page_last if page_last != page else None,
+                    marg_end=marg_last if marg_last != marg else None,
                 )
             )
 
         return results
+
+
+def _content_blocks(db: Database, start_id: int, end_id: int) -> list[BlockInfo]:
+    """Fetch a range of content blocks with their milestone markers restored.
+
+    Each block carries the milestones falling in it, and its text has their
+    markers put back at the positions indexing stripped them from, so a page
+    break or marginal number landing mid-block is visible where it belongs.
+    """
+    milestones = db.get_milestones_in_range(start_id, end_id)
+    blocks: list[BlockInfo] = []
+    for block_id, block_text, heading_level in db.get_content_range(start_id, end_id):
+        block_milestones = milestones.get(block_id, [])
+        blocks.append(
+            BlockInfo(
+                id=block_id,
+                text=insert_milestone_markers(block_text, block_milestones),
+                heading_level=heading_level,
+                milestones=block_milestones,
+            )
+        )
+    return blocks
 
 
 def _get_milestone_context(
@@ -400,10 +475,7 @@ def _get_milestone_context(
                 BlockInfo(id=heading_id, text=heading_text, heading_level=level)
             )
 
-    for block_id, block_text, heading_level in db.get_content_range(start_id, end_id):
-        blocks.append(
-            BlockInfo(id=block_id, text=block_text, heading_level=heading_level)
-        )
+    blocks.extend(_content_blocks(db, start_id, end_id))
 
     return blocks
 
@@ -696,11 +768,7 @@ def get_context(
                 )
 
         # Get content range
-        content_blocks = db.get_content_range(start_id, end_id)
-        for block_id, block_text, heading_level in content_blocks:
-            blocks.append(
-                BlockInfo(id=block_id, text=block_text, heading_level=heading_level)
-            )
+        blocks.extend(_content_blocks(db, start_id, end_id))
 
         return blocks
 
@@ -750,12 +818,7 @@ def _collect_section(
                     BlockInfo(id=heading_id, text=heading_text, heading_level=lvl)
                 )
 
-    for block_id, block_text, heading_level in db.get_content_range(
-        section_start_id, last_id
-    ):
-        blocks.append(
-            BlockInfo(id=block_id, text=block_text, heading_level=heading_level)
-        )
+    blocks.extend(_content_blocks(db, section_start_id, last_id))
 
     return blocks
 

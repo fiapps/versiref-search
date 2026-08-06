@@ -72,7 +72,9 @@ class BlockInfo:
         id: Content block ID
         text: Markdown text of the block
         heading_level: Heading level (1-6) or None for non-headings
-        milestones: Milestone markers extracted from this block's source text
+        milestones: Milestone markers falling in this block — extracted from
+            its source text when indexing, read back from the index when
+            retrieving content
 
     """
 
@@ -82,23 +84,100 @@ class BlockInfo:
     milestones: list[RawMilestone] = field(default_factory=list)
 
 
-def _milestone_annotations(page: str | None, marg: str | None) -> list[str]:
-    """Build ``"key value"`` display annotations for the milestones in effect."""
+def insert_milestone_markers(text: str, milestones: list[RawMilestone]) -> str:
+    """Put milestone markers back into block text at their recorded offsets.
+
+    Indexing strips the markers from the stored text, so a block whose page
+    changes partway through gives no sign of where the break falls. Restoring
+    them in the same ``<!-- page: 204 -->`` form they were written in shows
+    which part of the block belongs to which page, and keeps the text
+    re-indexable.
+
+    Offsets are relative to the stored text; ``text`` may additionally hold
+    ``<mark>`` highlight tags, which are skipped when locating an offset so a
+    marker still lands between the right two words.
+
+    Args:
+        text: Block text, possibly with ``<mark>`` tags inserted
+        milestones: Milestones falling in this block
+
+    Returns:
+        The text with a marker comment at each milestone's position
+
+    """
+    if not milestones:
+        return text
+
+    # Positions in `text` of each character of the stored (unhighlighted) text.
+    positions: list[int] = []
+    i = 0
+    while i < len(text):
+        if text.startswith("<mark>", i):
+            i += len("<mark>")
+        elif text.startswith("</mark>", i):
+            i += len("</mark>")
+        else:
+            positions.append(i)
+            i += 1
+    positions.append(len(text))
+
+    for milestone in sorted(milestones, key=lambda m: m.offset, reverse=True):
+        offset = min(max(milestone.offset, 0), len(positions) - 1)
+        pos = positions[offset]
+        # Keep the marker outside a highlighted span it would otherwise open in.
+        while text[:pos].endswith("<mark>"):
+            pos -= len("<mark>")
+
+        marker = f"<!-- {milestone.type}: {milestone.value} -->"
+        # Restore the spacing the marker had before it was stripped, judged
+        # from the neighboring stored characters rather than the display text.
+        prev_char = text[positions[offset - 1]] if offset > 0 else ""
+        next_char = text[positions[offset]] if offset < len(positions) - 1 else ""
+        if prev_char and not prev_char.isspace():
+            marker = " " + marker
+        if next_char and not next_char.isspace():
+            marker = marker + " "
+
+        text = text[:pos] + marker + text[pos:]
+
+    return text
+
+
+def _milestone_annotations(
+    page: str | None,
+    marg: str | None,
+    page_end: str | None = None,
+    marg_end: str | None = None,
+) -> list[str]:
+    """Build ``"key value"`` display annotations for the milestones in effect.
+
+    A milestone recorded inside the block or span gives a range
+    (``"pages 204-205"``) rather than a single value.
+    """
     annotations = []
     if page is not None:
-        annotations.append(f"page {page}")
+        annotations.append(f"pages {page}-{page_end}" if page_end else f"page {page}")
     if marg is not None:
-        annotations.append(f"marg {marg}")
+        annotations.append(f"marg {marg}-{marg_end}" if marg_end else f"marg {marg}")
     return annotations
 
 
-def _milestone_xml_attrs(page: str | None, marg: str | None) -> str:
+def _milestone_xml_attrs(
+    page: str | None,
+    marg: str | None,
+    page_end: str | None = None,
+    marg_end: str | None = None,
+) -> str:
     """Build XML attributes for the milestones in effect (e.g. ``page="204"``)."""
     attrs = ""
     if page is not None:
         attrs += f' page="{page}"'
+        if page_end:
+            attrs += f' page_end="{page_end}"'
     if marg is not None:
         attrs += f' marg="{marg}"'
+        if marg_end:
+            attrs += f' marg_end="{marg_end}"'
     return attrs
 
 
@@ -109,12 +188,17 @@ class SearchResult:
     Attributes:
         block_id: ID of the content block containing hits
         block_text: Markdown text of the content block (may contain <mark> tags
-            for string search highlights)
+            for string search highlights, and milestone marker comments where
+            a page or marginal number changes mid-block)
         heading_context: Dictionary mapping heading levels to BlockInfo for context
-        page: Page value in effect at the block, or None if the database has
-            no page milestone before it
-        marg: Marginal-number value in effect at the block, or None if the
-            database has no marg milestone before it
+        page: Page value in effect at the start of the block, or None if the
+            database has no page milestone before it
+        marg: Marginal-number value in effect at the start of the block, or
+            None if the database has no marg milestone before it
+        page_end: Last page value recorded inside the block, when the page
+            changes partway through it; None otherwise
+        marg_end: Last marginal number recorded inside the block, when it
+            changes partway through it; None otherwise
 
     """
 
@@ -123,6 +207,8 @@ class SearchResult:
     heading_context: dict[int, BlockInfo]
     page: str | None = None
     marg: str | None = None
+    page_end: str | None = None
+    marg_end: str | None = None
 
     def format_for_display(self, show_headings: bool = True) -> str:
         """Format the search result for terminal display.
@@ -148,7 +234,9 @@ class SearchResult:
             lines.append("")
 
         # Add the content block with ID (and page/marg, if known)
-        annotations = _milestone_annotations(self.page, self.marg)
+        annotations = _milestone_annotations(
+            self.page, self.marg, self.page_end, self.marg_end
+        )
         suffix = f", {', '.join(annotations)}" if annotations else ""
         lines.append(f"[Block {self.block_id}{suffix}]")
         lines.append(self.block_text)
@@ -175,7 +263,7 @@ class SearchResult:
                 lines.append(heading.text.strip())
                 lines.append("</block>")
 
-        attrs = _milestone_xml_attrs(self.page, self.marg)
+        attrs = _milestone_xml_attrs(self.page, self.marg, self.page_end, self.marg_end)
         lines.append(f'<block n="{self.block_id}"{attrs}>')
         lines.append(self.block_text)
         lines.append("</block>")
@@ -199,6 +287,10 @@ class ScopeResult:
         heading_context: Dictionary mapping heading levels to BlockInfo for context
         page: Page value in effect at the span's start, or None
         marg: Marginal-number value in effect at the span's start, or None
+        page_end: Last page value recorded inside the span, when the page
+            changes over its course; None otherwise
+        marg_end: Last marginal number recorded inside the span, when it
+            changes over its course; None otherwise
 
     """
 
@@ -208,6 +300,8 @@ class ScopeResult:
     heading_context: dict[int, BlockInfo]
     page: str | None = None
     marg: str | None = None
+    page_end: str | None = None
+    marg_end: str | None = None
 
     def format_for_display(self, show_headings: bool = True) -> str:
         """Format the scope result for terminal display.
@@ -229,7 +323,9 @@ class ScopeResult:
         if lines:
             lines.append("")
 
-        annotations = _milestone_annotations(self.page, self.marg)
+        annotations = _milestone_annotations(
+            self.page, self.marg, self.page_end, self.marg_end
+        )
         suffix = f", {', '.join(annotations)}" if annotations else ""
         lines.append(f"[Blocks {self.block_start}-{self.block_end}{suffix}]")
         lines.append(self.block_text)
@@ -256,7 +352,9 @@ class ScopeResult:
                 lines.append("</block>")
 
         attrs = f'start="{self.block_start}" end="{self.block_end}"'
-        attrs += _milestone_xml_attrs(self.page, self.marg)
+        attrs += _milestone_xml_attrs(
+            self.page, self.marg, self.page_end, self.marg_end
+        )
         lines.append(f"<scope {attrs}>")
         lines.append(self.block_text)
         lines.append("</scope>")

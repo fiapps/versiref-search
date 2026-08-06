@@ -273,7 +273,8 @@ See [Milestones](#milestones) for scope markers you can place in the text when s
 ## Milestones
 
 Milestones are markers embedded in the source Markdown as HTML comments.
-They are **stripped from the stored text** at indexing time and recorded in a separate index, so they never pollute search results, phrase matching, or reference scanning.
+They are **stripped from the stored text** at indexing time and recorded in a separate index, so they never interfere with phrase matching or reference scanning.
+Page and marg markers are put back into the text of results and `show` output, at the character position they were stripped from, so a break falling mid-block stays visible (see [searching.md](searching.md)).
 Three milestone types are recognized; any other HTML comment is left in the text untouched.
 
 ### Page Milestones
@@ -292,6 +293,7 @@ The value is free text, so Roman-numeral front matter (`<!-- page: xvii -->`) wo
 Markers may fall mid-paragraph (the break position is recorded to the character) or stand alone between blocks.
 
 With page milestones present, search results automatically report the page of each hit, and `show --page` retrieves the blocks of a given page (see [searching.md](searching.md)).
+A hit on a block a page break falls inside reports both pages, and shows the marker where the break falls.
 Page numbers may be sparse — you can record only some page breaks — in which case a hit reports the most recent *recorded* page before it.
 
 ### Marginal-Number Milestones

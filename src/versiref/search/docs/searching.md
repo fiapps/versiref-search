@@ -40,6 +40,16 @@ Each result includes:
 - **Page**: when the database was indexed with page milestones, the page of the printed edition the block falls on (e.g., `[Block 42, page 204]`, or `page="204"` in XML output). With sparse page milestones this is the most recent *recorded* page before the block.
 - **Marg**: when the database was indexed with marg milestones, the marginal number of the block (e.g., `[Block 42, marg 652]`, or `marg="652"` in XML output). With sparse marg milestones this is the most recent *recorded* value before the block. Both page and marg appear together when the database has both (e.g., `[Block 42, page 204, marg 652]`).
 
+When a page break or marginal number falls *inside* the block, the result reports a range rather than a single value — `[Block 42, pages 204-205]` (`page="204" page_end="205"` in XML), `[Block 42, marg 652-653]` — and the block text carries the marker at the point where the value changes:
+
+```text
+[Block 42, pages 204-205]
+Text ending page 204. <!-- page: 205 --> Text starting page 205.
+```
+
+The marker is written in the same form as in the source, so quoting from a block, you can tell which page (or marginal number) the quoted words actually fall on rather than assuming the value the block starts with.
+`show` output carries the same markers.
+
 ### Plain Text Output
 
 The default output shows heading context, a block ID, and the block text.
