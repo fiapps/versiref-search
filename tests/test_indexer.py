@@ -673,3 +673,89 @@ def test_malformed_frontmatter_warns_once(tmp_path, ref_style, caplog):
             ref_style=ref_style,
         )
     assert caplog.text.count("not valid YAML") == 1
+
+
+# --- Frontmatter and milestones together ---
+
+# A document carrying both frontmatter and a page marker in its opening block.
+# No real corpus is likely to be both a compilation (which is what gives
+# documents frontmatter) and a page-marked edition of a single work, but the
+# combination is what would expose a milestone offset shifted by the strip.
+MARKED_BODY = """\
+TO THE VENERABLE BRETHREN, PATRIARCHS, PRIMATES, <!-- page: 41 --> ARCHBISHOPS \
+AND OTHER LOCAL ORDINARIES, citing Lk 1:28.
+
+<!-- page: 42 -->
+
+A paragraph opening the second page.
+
+## A Section
+
+Text citing Ps 45:10 with a break <!-- page: 43 --> partway through it.
+"""
+
+FRONTMATTER_VARIANT = (
+    "---\n"
+    "date: 1954-10-11\n"
+    "description: |\n"
+    "  An encyclical, described over\n"
+    "  more than one line.\n"
+    'source: "https://example.org/ad-caeli-reginam.html"\n'
+    "title: Ad Caeli Reginam\n"
+    "---\n\n" + MARKED_BODY
+)
+
+# The same document with the frontmatter resolved by hand into the heading
+# that indexing would synthesize from it.
+RESOLVED_VARIANT = "# Ad Caeli Reginam\n\n" + MARKED_BODY
+
+
+def _index_contents(tmp_path, name, text, ref_style):
+    """Index Markdown text and return its blocks and milestones."""
+    source = tmp_path / f"{name}.md"
+    source.write_text(text, encoding="utf-8")
+    db_path = tmp_path / f"{name}.db"
+    index_document(
+        input_path=source,
+        output_path=db_path,
+        metadata={"title": "Test", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    with Database(db_path) as db:
+        count = db.count_content_blocks()
+        blocks = db.get_content_range(1, count)
+        milestones = db.get_milestones_in_range(1, count)
+    return blocks, milestones
+
+
+def test_frontmatter_strip_leaves_milestones_undisturbed(tmp_path, ref_style):
+    """Stripping frontmatter must not shift milestone offsets.
+
+    Compares the same document twice: once with frontmatter for indexing to
+    strip and replace with a title heading, once with that heading written
+    out by hand. Asserting the two agree tests the invariant itself, rather
+    than particular offsets that would change with the fixture text.
+    """
+    with_fm, with_fm_milestones = _index_contents(
+        tmp_path, "frontmatter", FRONTMATTER_VARIANT, ref_style
+    )
+    resolved, resolved_milestones = _index_contents(
+        tmp_path, "resolved", RESOLVED_VARIANT, ref_style
+    )
+    assert with_fm == resolved
+    assert with_fm_milestones == resolved_milestones
+
+
+def test_milestone_in_block_after_stripped_frontmatter(tmp_path, ref_style):
+    """The marker is stripped from the text, its offset recorded in it."""
+    blocks, milestones = _index_contents(
+        tmp_path, "frontmatter", FRONTMATTER_VARIANT, ref_style
+    )
+    # Block 1 is the synthesized title; block 2 opens the document.
+    assert blocks[0][1] == "# Ad Caeli Reginam"
+    marker = milestones[2][0]
+    assert marker.value == "41"
+    text = blocks[1][1]
+    assert "<!-- page: 41 -->" not in text
+    assert text[: marker.offset].endswith("PRIMATES, ")
+    assert text[marker.offset :].startswith("ARCHBISHOPS")
