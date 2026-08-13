@@ -178,6 +178,9 @@ skip_abbreviations_check: false
 
 # Derive commentary scopes from headings that contain Bible references
 commentary_headings: false
+
+# Heading level for a title taken from YAML frontmatter (false to index none)
+frontmatter_title_level: 1
 ```
 
 ### Config Key Reference
@@ -269,6 +272,39 @@ When enabled, every heading that contains a recognized Bible reference records t
 The section runs from the heading through the block before the next heading at the same or a shallower level, so per-verse subsections nest naturally inside a pericope-level section.
 Enable this only for works that are actually commentaries; in other works a reference in a heading is usually just a citation.
 See [Milestones](#milestones) for scope markers you can place in the text when suitable headings do not exist, and [searching.md](searching.md) for how to query scopes.
+
+#### `frontmatter_title_level`
+
+Heading level (1–6) at which a `title` declared in a source document's YAML frontmatter is indexed as a heading.
+Default: `1`.
+Set to `false` to index no such heading.
+See [YAML Frontmatter](#yaml-frontmatter).
+
+## YAML Frontmatter
+
+A source document may open with a YAML frontmatter block:
+
+```markdown
+---
+date: 1898-09-05
+title: Diuturni Temporis
+---
+
+*To Our Venerable Brethren...*
+```
+
+The block is recognized only at the very start of the file, and it is **not indexed**: its keys are neither searchable text nor document metadata.
+(Document metadata comes from the metadata file; see [Metadata File](#metadata-file).)
+A leading `---` that is not followed by a YAML mapping keeps its ordinary Markdown meaning as a thematic break, and a warning says so.
+
+When the frontmatter declares a `title`, that title is indexed as a heading opening the document, so that blocks before the document's first real heading still have heading context in search results.
+Two cases leave the document as it is, since it already heads itself:
+
+- the document contains a heading at `frontmatter_title_level` or shallower — it would otherwise end up with two competing top-level headings;
+- the document's first heading repeats the title — the title would otherwise be indexed twice.
+
+The level is set with [`frontmatter_title_level`](#frontmatter_title_level).
+A collection that reserves level 1 for a heading of its own — an overview document heading the whole corpus, say — will want its documents at level 2, or no title heading at all.
 
 ## Milestones
 

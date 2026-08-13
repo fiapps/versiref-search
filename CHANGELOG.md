@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- A `title` declared in a source document's YAML frontmatter is now indexed as a heading opening the document, so that hits before its first real heading are shown under the document's title instead of under nothing. Documents that already head themselves — carrying a heading at that level or opening with the same title — are left alone, so a collection whose documents each begin with their own title heading gains no duplicates. The new `frontmatter_title_level` config key sets the level, or turns the heading off for collections that reserve the top levels for headings of their own.
+
+### Fixed
+
+- YAML frontmatter is no longer indexed. Markdown has no notion of frontmatter, so the block's closing `---` read as a heading underline and the whole of it — dates, descriptions, source URLs — was indexed as a heading. It was searchable text, and worse, being a heading it became the heading context for every following block up to the next real heading, so results were headed with a wall of YAML. Documents whose frontmatter carried book-like abbreviations could also draw spurious unrecognized-abbreviation warnings. Databases built from sources with frontmatter should be re-indexed.
+
 ## 0.9.1 - 2026-08-05
 
 ### Changed

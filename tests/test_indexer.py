@@ -556,3 +556,120 @@ def test_invalid_scope_reference_warns_and_skips(tmp_path, ref_style, caplog):
         )
     assert any("could not be parsed" in r.message for r in caplog.records)
     assert get_index_stats(db_path)["scope_count"] == 0
+
+
+# --- YAML frontmatter ---
+
+FRONTMATTER_MD = """\
+---
+date: 1898-09-05
+description: Encyclical of Pope Leo XIII on the Rosary
+source: "https://www.vatican.va/x.html"
+title: Diuturni Temporis
+---
+
+Opening paragraph referencing Lk 1:28.
+
+## Section A
+
+Second paragraph citing Ps 45:10.
+"""
+
+
+@pytest.fixture
+def frontmatter_md(tmp_path):
+    path = tmp_path / "frontmatter.md"
+    path.write_text(FRONTMATTER_MD, encoding="utf-8")
+    return path
+
+
+def _blocks(db_path):
+    """Return (block_text, heading_level) for every block in document order."""
+    with Database(db_path) as db:
+        count = db.count_content_blocks()
+        return [(text, level) for _, text, level in db.get_content_range(1, count)]
+
+
+def test_frontmatter_not_indexed_as_content(tmp_path, frontmatter_md, ref_style):
+    db_path = tmp_path / "out.db"
+    index_document(
+        input_path=frontmatter_md,
+        output_path=db_path,
+        metadata={"title": "Test", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    texts = [text for text, _ in _blocks(db_path)]
+    assert not any("vatican.va" in text for text in texts)
+    assert not any("description:" in text for text in texts)
+
+
+def test_frontmatter_title_indexed_as_heading(tmp_path, frontmatter_md, ref_style):
+    db_path = tmp_path / "out.db"
+    index_document(
+        input_path=frontmatter_md,
+        output_path=db_path,
+        metadata={"title": "Test", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    assert _blocks(db_path)[0] == ("# Diuturni Temporis", 1)
+
+
+def test_frontmatter_title_level_none(tmp_path, frontmatter_md, ref_style):
+    db_path = tmp_path / "out.db"
+    index_document(
+        input_path=frontmatter_md,
+        output_path=db_path,
+        metadata={"title": "Test", "versification": "eng"},
+        ref_style=ref_style,
+        frontmatter_title_level=None,
+    )
+    first_text, first_level = _blocks(db_path)[0]
+    assert first_level is None
+    assert first_text.startswith("Opening paragraph")
+
+
+def test_frontmatter_references_still_indexed(tmp_path, frontmatter_md, ref_style):
+    """Stripping frontmatter must not disturb the reference count."""
+    db_path = tmp_path / "out.db"
+    index_document(
+        input_path=frontmatter_md,
+        output_path=db_path,
+        metadata={"title": "Test", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    assert get_index_stats(db_path)["reference_count"] == 2
+
+
+def test_frontmatter_excluded_from_abbreviation_check(tmp_path, ref_style, caplog):
+    """A URL or date in frontmatter must not be read as a citation."""
+    path = tmp_path / "doc.md"
+    path.write_text(
+        "---\nsource: https://example.org/hf_l-xiii_enc_05091898.html\n"
+        "title: Doc\n---\n\nPlain body text.\n",
+        encoding="utf-8",
+    )
+    with caplog.at_level(logging.WARNING):
+        index_document(
+            input_path=path,
+            output_path=tmp_path / "out.db",
+            metadata={"title": "Test", "versification": "eng"},
+            ref_style=ref_style,
+        )
+    assert "Unrecognized abbreviation" not in caplog.text
+
+
+def test_malformed_frontmatter_warns_once(tmp_path, ref_style, caplog):
+    """The document is split once, not once per pass over it."""
+    path = tmp_path / "doc.md"
+    path.write_text(
+        "---\nsource: *Audiences of Pope John Paul II* (LEV, 2014)\n---\n\nBody.\n",
+        encoding="utf-8",
+    )
+    with caplog.at_level(logging.WARNING):
+        index_document(
+            input_path=path,
+            output_path=tmp_path / "out.db",
+            metadata={"title": "Test", "versification": "eng"},
+            ref_style=ref_style,
+        )
+    assert caplog.text.count("not valid YAML") == 1

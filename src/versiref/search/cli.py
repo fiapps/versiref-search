@@ -188,6 +188,20 @@ def index(
         # Resolve commentary_headings from config
         commentary_headings = bool(config.get("commentary_headings", False))
 
+        # Resolve frontmatter_title_level from config. A false-y value turns
+        # the title heading off, for corpora that reserve the top levels for
+        # headings of their own.
+        title_level = config.get("frontmatter_title_level", 1)
+        if title_level is None or title_level is False:
+            frontmatter_title_level = None
+        elif isinstance(title_level, int) and 1 <= title_level <= 6:
+            frontmatter_title_level = title_level
+        else:
+            raise ValueError(
+                f"Invalid frontmatter_title_level '{title_level}'. "
+                f"Valid values: 1-6, or false to index no title heading"
+            )
+
         # Rebuild from scratch: an existing database at the output path is
         # replaced, not added to. The first file replaces it; later files in
         # the same invocation accumulate into this fresh database.
@@ -204,6 +218,7 @@ def index(
                 abbreviation_whitelist=whitelist_list,
                 append=position > 0,
                 commentary_headings=commentary_headings,
+                frontmatter_title_level=frontmatter_title_level,
             )
 
         # Get and display stats

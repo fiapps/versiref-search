@@ -7,7 +7,7 @@ from pathlib import Path
 from versiref import Versification, RefParser, RefStyle, Sensitivity
 
 from .database import Database, PRODUCT_NAME, SCHEMA_VERSION
-from .markdown_parser import parse_markdown
+from .markdown_parser import parse_markdown, split_frontmatter
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +141,7 @@ def index_document(
     abbreviation_whitelist: list[str] | None = None,
     append: bool = False,
     commentary_headings: bool = False,
+    frontmatter_title_level: int | None = 1,
 ) -> None:
     """Index a Markdown document into a SQLite database.
 
@@ -166,6 +167,11 @@ def index_document(
             open commentary scopes: the referenced passage is recorded as the
             subject of the section the heading opens (through the next
             heading at the same or a shallower level).
+        frontmatter_title_level: Heading level at which a ``title`` declared
+            in the document's YAML frontmatter is indexed as a heading, or
+            None to index no such heading. Frontmatter itself is never
+            indexed either way. Documents that already head themselves keep
+            the heading they have.
 
     Raises:
         FileNotFoundError: If input file doesn't exist
@@ -189,11 +195,14 @@ def index_document(
     # Read Markdown content
     markdown_text = input_path.read_text(encoding="utf-8")
 
+    # Split frontmatter off once and work from the body, so that its URLs and
+    # dates cannot be mistaken for citations and a malformed block is reported
+    # once rather than once per pass over the document.
+    frontmatter, body = split_frontmatter(markdown_text)
+
     # Check for unrecognized abbreviations
     if check_abbreviations:
-        find_unrecognized_abbreviations(
-            markdown_text, ref_style, abbreviation_whitelist
-        )
+        find_unrecognized_abbreviations(body, ref_style, abbreviation_whitelist)
 
     # Setup versiref parser
     try:
@@ -204,7 +213,11 @@ def index_document(
     parser = RefParser(ref_style, vers)
 
     # Parse Markdown into blocks
-    blocks = parse_markdown(markdown_text)
+    blocks = parse_markdown(
+        body,
+        frontmatter=frontmatter,
+        frontmatter_title_level=frontmatter_title_level,
+    )
 
     # Replace any existing database unless appending, so a rebuild reflects
     # only the current source rather than accumulating duplicate blocks.

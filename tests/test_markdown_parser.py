@@ -4,6 +4,7 @@ from versiref.search.markdown_parser import (
     _extract_block,
     extract_milestones,
     parse_markdown,
+    split_frontmatter,
 )
 from versiref.search.models import RawMilestone
 
@@ -243,3 +244,141 @@ def test_milestone_preserves_fts_phrase_continuity():
     """Stripping must rejoin the phrase around a mid-sentence page break."""
     blocks = parse_markdown("faithful <!-- page: 204 --> persistence\n")
     assert blocks[0].text == "faithful persistence"
+
+
+# --- YAML frontmatter ---
+
+ENCYCLICAL_FRONTMATTER = """\
+---
+date: 1898-09-05
+description: Encyclical of Pope Leo XIII on the Rosary
+source: "https://www.vatican.va/x.html"
+title: Diuturni Temporis
+---
+
+*To Our Venerable Brethren...*
+
+## Section One
+"""
+
+
+def test_frontmatter_is_not_indexed():
+    blocks = parse_markdown(ENCYCLICAL_FRONTMATTER)
+    assert not any("description:" in b.text for b in blocks)
+    assert not any(b.text == "---" for b in blocks)
+
+
+def test_frontmatter_title_becomes_heading():
+    blocks = parse_markdown(ENCYCLICAL_FRONTMATTER)
+    assert blocks[0].heading_level == 1
+    assert blocks[0].text == "# Diuturni Temporis"
+    assert [b.id for b in blocks] == [0, 1, 2]
+
+
+def test_frontmatter_title_level_configurable():
+    md = "---\ntitle: Diuturni Temporis\n---\n\n### Deep section\n\nBody.\n"
+    blocks = parse_markdown(md, frontmatter_title_level=2)
+    assert blocks[0].text == "## Diuturni Temporis"
+    assert blocks[0].heading_level == 2
+
+
+def test_configured_title_level_yields_to_body_headings():
+    """Level 2 is suppressed by the body's own H2, as level 1 is by an H1."""
+    blocks = parse_markdown(ENCYCLICAL_FRONTMATTER, frontmatter_title_level=2)
+    assert blocks[0].text == "*To Our Venerable Brethren...*"
+
+
+def test_frontmatter_title_can_be_disabled():
+    blocks = parse_markdown(ENCYCLICAL_FRONTMATTER, frontmatter_title_level=None)
+    assert blocks[0].heading_level is None
+    assert blocks[0].text == "*To Our Venerable Brethren...*"
+
+
+def test_frontmatter_without_title_adds_no_heading():
+    blocks = parse_markdown("---\ndate: 1996-05-08\n---\n\nBody text.\n")
+    assert [b.text for b in blocks] == ["Body text."]
+
+
+def test_no_title_heading_when_body_repeats_it():
+    """A document whose own first heading is its title is not given a second."""
+    md = (
+        "---\ntitle: Mary and Joseph Lived Gift of Virginity\n---\n\n"
+        "## Mary and Joseph Lived Gift of Virginity\n\n"
+        "### A section\n\nBody text.\n"
+    )
+    blocks = parse_markdown(md)
+    assert [b.heading_level for b in blocks] == [2, 3, None]
+
+
+def test_no_title_heading_when_body_has_one_at_that_level():
+    blocks = parse_markdown("---\ntitle: Something Else\n---\n\n# Own Title\n\nBody.\n")
+    assert [b.text for b in blocks] == ["# Own Title", "Body."]
+
+
+def test_title_heading_added_above_deeper_headings():
+    md = "---\ntitle: Diuturni Temporis\n---\n\n## Section One\n\nBody.\n"
+    blocks = parse_markdown(md)
+    assert [b.heading_level for b in blocks] == [1, 2, None]
+
+
+def test_empty_frontmatter_is_stripped():
+    blocks = parse_markdown("---\n---\n\nBody.\n")
+    assert [b.text for b in blocks] == ["Body."]
+
+
+def test_leading_thematic_break_is_left_alone():
+    """A '---' that is not frontmatter keeps its Markdown meaning."""
+    blocks = parse_markdown("---\n\nJust a break at the top.\n\n---\n")
+    assert [b.text for b in blocks] == ["---", "Just a break at the top.", "---"]
+
+
+def test_malformed_frontmatter_is_left_alone(caplog):
+    md = "---\ntitle: [unclosed\n---\n\nBody.\n"
+    with caplog.at_level("WARNING"):
+        blocks = parse_markdown(md)
+    assert any(b.text == "Body." for b in blocks)
+    assert "not valid YAML" in caplog.text
+
+
+def test_mid_document_frontmatter_fence_is_not_stripped():
+    blocks = parse_markdown("Intro.\n\n---\ntitle: Nope\n---\n\nAfter.\n")
+    assert blocks[0].text == "Intro."
+    assert any("title: Nope" in b.text for b in blocks)
+
+
+def test_frontmatter_milestone_offsets_unaffected():
+    md = "---\ntitle: Doc\n---\n\nfaithful <!-- page: 204 --> persistence\n"
+    blocks = parse_markdown(md)
+    assert blocks[1].text == "faithful persistence"
+    assert blocks[1].milestones == [
+        RawMilestone(type="page", value="204", offset=len("faithful "))
+    ]
+
+
+def test_yaml_alias_node_frontmatter_is_left_alone(caplog):
+    """A value opening with Markdown emphasis reads as a YAML alias node.
+
+    ``source: *Title* (publisher)`` makes YAML look for an anchor named
+    "Title", which is the kind of frontmatter a corpus of titled works
+    produces naturally. Regex-based strippers do not notice.
+    """
+    md = (
+        "---\n"
+        "source: *Audiences of Pope John Paul II* (LEV, 2014), Verbum edition\n"
+        "title: An Audience\n"
+        "---\n\n"
+        "Body.\n"
+    )
+    with caplog.at_level("WARNING"):
+        blocks = parse_markdown(md)
+    assert "not valid YAML" in caplog.text
+    assert any(b.text == "Body." for b in blocks)
+
+
+def test_caller_supplied_frontmatter_is_not_reparsed(caplog):
+    """Passing a split-off frontmatter avoids a second pass over the text."""
+    frontmatter, body = split_frontmatter("---\ntitle: Doc\n---\n\nBody.\n")
+    with caplog.at_level("WARNING"):
+        blocks = parse_markdown(body, frontmatter=frontmatter)
+    assert [b.text for b in blocks] == ["# Doc", "Body."]
+    assert caplog.text == ""

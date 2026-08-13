@@ -4,6 +4,7 @@ import logging
 import re
 from typing import Any
 import mistune
+import yaml
 from .models import BlockInfo, RawMilestone
 
 logger = logging.getLogger(__name__)
@@ -12,6 +13,55 @@ logger = logging.getLogger(__name__)
 # <!-- scope: John 7:53-8:11 -->, or <!-- marg: 667 -->. Other HTML comments
 # are left untouched.
 MILESTONE_RE = re.compile(r"<!--\s*(page|scope|marg)\s*:\s*(.*?)\s*-->")
+
+# YAML frontmatter: a "---" fence on the very first line, closed by a line of
+# "---" or "...". Markdown itself has no notion of frontmatter, so left in
+# place the opening fence parses as a thematic break and the closing one as a
+# setext underline, turning the whole block into a heading.
+FRONTMATTER_OPEN_RE = re.compile(r"^---[ \t]*\r?\n")
+FRONTMATTER_CLOSE_RE = re.compile(r"^(?:---|\.\.\.)[ \t]*(?:\r?\n|\Z)", re.MULTILINE)
+
+
+def split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
+    """Split a leading YAML frontmatter block off Markdown text.
+
+    Recognized only at the very start of the document. Anything that does not
+    parse as a YAML mapping is left alone and reported, on the assumption that
+    a leading ``---`` was meant as a thematic break.
+
+    Args:
+        text: Raw Markdown text, possibly opening with frontmatter
+
+    Returns:
+        Tuple of (frontmatter, body). The frontmatter is empty when there is
+        none, in which case the body is the text unchanged.
+
+    """
+    opening = FRONTMATTER_OPEN_RE.match(text)
+    if opening is None:
+        return {}, text
+    closing = FRONTMATTER_CLOSE_RE.search(text, opening.end())
+    if closing is None:
+        return {}, text
+    try:
+        data = yaml.safe_load(text[opening.end() : closing.start()])
+    except yaml.YAMLError as e:
+        logger.warning(
+            "Leading '---' block is not valid YAML (%s); "
+            "treating it as Markdown rather than frontmatter.",
+            e,
+        )
+        return {}, text
+    if data is None:
+        data = {}  # empty frontmatter, still worth stripping
+    if not isinstance(data, dict):
+        logger.warning(
+            "Leading '---' block is YAML but not a mapping; "
+            "treating it as Markdown rather than frontmatter."
+        )
+        return {}, text
+    return data, text[closing.end() :]
+
 
 # Block-level token types this module reconstructs explicitly. Used to tell a
 # container of blocks from a container of inline elements when falling back on
@@ -76,8 +126,52 @@ def extract_milestones(text: str) -> tuple[str, list[RawMilestone]]:
     return "".join(parts), milestones
 
 
-def parse_markdown(markdown_text: str) -> list[BlockInfo]:
+def _normalize_heading_text(text: str) -> str:
+    """Reduce heading or title text for comparison."""
+    return " ".join(text.lstrip("#").split()).casefold()
+
+
+def _title_block(
+    frontmatter: dict[str, Any], level: int, blocks: list[BlockInfo]
+) -> BlockInfo | None:
+    """Build a heading block from the frontmatter title, if one is warranted.
+
+    Returns None when the document already heads itself: either it carries a
+    heading at ``level`` or shallower — adding another would give it two
+    competing top-level headings — or its first heading repeats the title,
+    which would index the title twice. Both are common in corpora whose
+    documents are converted from a source that already had a title.
+    """
+    title = frontmatter.get("title")
+    if not isinstance(title, str) or not title.strip():
+        return None
+    headings = [b for b in blocks if b.heading_level is not None]
+    if any(b.heading_level is not None and b.heading_level <= level for b in headings):
+        return None
+    if headings and _normalize_heading_text(headings[0].text) == (
+        _normalize_heading_text(title)
+    ):
+        return None
+    return BlockInfo(
+        id=0,
+        text=f"{'#' * level} {title.strip()}",
+        heading_level=level,
+        milestones=[],
+    )
+
+
+def parse_markdown(
+    markdown_text: str,
+    *,
+    frontmatter: dict[str, Any] | None = None,
+    frontmatter_title_level: int | None = 1,
+) -> list[BlockInfo]:
     """Parse Markdown text into block-level elements.
+
+    A leading YAML frontmatter block is stripped and not indexed. When it
+    declares a ``title``, a heading carrying that title opens the document, so
+    that blocks before its first real heading still have heading context —
+    unless the document already heads itself (see :func:`_title_block`).
 
     Milestone comments (``<!-- page: ... -->``, ``<!-- scope: ... -->``,
     ``<!-- marg: ... -->``) are stripped from block text and attached to the block as
@@ -87,11 +181,20 @@ def parse_markdown(markdown_text: str) -> list[BlockInfo]:
 
     Args:
         markdown_text: Raw Markdown text to parse
+        frontmatter: Frontmatter already split off ``markdown_text`` by the
+            caller, which is then taken to hold the body alone. Pass it to
+            avoid splitting the document twice, which would repeat any
+            warning about a malformed frontmatter block.
+        frontmatter_title_level: Heading level for the title taken from
+            frontmatter, or None to index no title heading
 
     Returns:
         List of BlockInfo objects representing block-level elements in document order
 
     """
+    if frontmatter is None:
+        frontmatter, markdown_text = split_frontmatter(markdown_text)
+
     # Create mistune markdown parser that returns AST
     markdown = mistune.create_markdown(renderer="ast")
     tokens: list[dict[str, Any]] = markdown(markdown_text)  # type: ignore[assignment]
@@ -133,6 +236,13 @@ def parse_markdown(markdown_text: str) -> list[BlockInfo]:
             RawMilestone(type=m.type, value=m.value, offset=len(last.text))
             for m in pending
         )
+
+    if frontmatter_title_level is not None:
+        title = _title_block(frontmatter, frontmatter_title_level, blocks)
+        if title is not None:
+            blocks.insert(0, title)
+            for position, block in enumerate(blocks):
+                block.id = position
 
     return blocks
 
