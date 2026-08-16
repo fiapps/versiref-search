@@ -815,7 +815,13 @@ class Database:
         return (row["id"], row["block_text"]) if row else None
 
     def get_all_preceding_headings(self, content_id: int) -> dict[int, tuple[int, str]]:
-        """Get the most recent heading at each level before a content block.
+        """Get the chain of headings enclosing a content block.
+
+        Walks backwards from the block: the nearest preceding heading is its
+        immediate parent, and each further step looks only for a heading
+        strictly shallower than the one already found. A heading at level N
+        therefore closes every open heading at level >= N, and the returned
+        chain always has increasing levels and increasing block IDs.
 
         Args:
             content_id: Content block ID to search before
@@ -827,11 +833,17 @@ class Database:
         if not self.conn:
             raise RuntimeError("Database not connected")
 
-        headings = {}
-        for level in range(1, 7):
-            heading = self.get_preceding_heading(content_id, level)
-            if heading:
-                headings[level] = heading
+        headings: dict[int, tuple[int, str]] = {}
+        before_id = content_id - 1
+        max_level = 6
+        while max_level >= 1:
+            heading = self.get_enclosing_heading(before_id, max_level)
+            if heading is None:
+                break
+            heading_id, heading_text, level = heading
+            headings[level] = (heading_id, heading_text)
+            before_id = heading_id - 1
+            max_level = level - 1
         return headings
 
     def get_enclosing_heading(

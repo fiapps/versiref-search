@@ -333,6 +333,45 @@ def test_get_all_preceding_headings(db):
     assert headings[2][0] == h2_id
 
 
+def test_get_all_preceding_headings_closes_deeper_levels(db):
+    db.insert_content("# P1", heading_level=1)
+    db.insert_content("## C1", heading_level=2)
+    db.insert_content("### S1", heading_level=3)
+    db.insert_content("alpha text here.")
+    c2_id = db.insert_content("## C2", heading_level=2)
+    p_id = db.insert_content("beta text here.")
+    headings = db.get_all_preceding_headings(p_id)
+    # "## C2" closes "### S1", so only the h1 and the new h2 remain.
+    assert sorted(headings) == [1, 2]
+    assert headings[2][0] == c2_id
+
+
+def test_get_all_preceding_headings_skipped_levels(db):
+    # Badly structured input: an h2 followed directly by an h4, then an h3
+    # that must close the h4 even though no h3 opened above it.
+    db.insert_content("# Book", heading_level=1)
+    db.insert_content("## Chapter", heading_level=2)
+    db.insert_content("#### Deep", heading_level=4)
+    h3_id = db.insert_content("### Middle", heading_level=3)
+    p_id = db.insert_content("Content.")
+    headings = db.get_all_preceding_headings(p_id)
+    assert sorted(headings) == [1, 2, 3]
+    assert headings[3][0] == h3_id
+
+
+def test_get_all_preceding_headings_ids_increase_with_level(db):
+    db.insert_content("# Part", heading_level=1)
+    db.insert_content("## Chapter 21", heading_level=2)
+    db.insert_content("### Thrust", heading_level=3)
+    db.insert_content("## Chapter 22", heading_level=2)
+    p_id = db.insert_content("A hit in chapter 22.")
+    headings = db.get_all_preceding_headings(p_id)
+    # A genuine ancestor chain is monotonic: deeper headings come later.
+    ids = [headings[level][0] for level in sorted(headings)]
+    assert ids == sorted(ids)
+    assert all(block_id < p_id for block_id in ids)
+
+
 def test_get_all_preceding_headings_empty(db):
     p_id = db.insert_content("First block, no headings precede it.")
     assert db.get_all_preceding_headings(p_id) == {}

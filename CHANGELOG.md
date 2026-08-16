@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- The heading context shown with a result no longer keeps deeper headings that an intervening shallower heading has closed. A hit in a chapter with no subsections of its own was headed with the last subsection heading of an earlier chapter, attributing the passage to a section it is not in; the trail now lists only the headings that genuinely enclose the block, whether or not the document skips heading levels. Existing databases need no re-indexing — the trail is computed at search time.
+
 ## 0.10.0 - 2026-08-13
 
 ### Added
