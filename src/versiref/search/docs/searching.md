@@ -17,7 +17,7 @@ Search for a text string (or any SQLite FTS5 search expression):
 versiref-search search mybook.db -s "justification"
 ```
 
-Combine both (results must match both criteria):
+Combine both (results match either criterion):
 
 ```sh
 versiref-search search mybook.db -r "Romans 3" -s "faith"
