@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Requires versiref 0.13.0, whose references hold their verse ranges directly and may span books. A range such as "Matt–John" or "1 Sam 31:1–2 Sam 1:27" is indexed and searched as a single range, and a reference to a verse the versification omits, such as the NABRE's Matthew 17:21, is valid again.
+- `analyze` scores each candidate versification by verse range instead of by each book of a reference. One verse that a versification lacks no longer counts against the other ranges cited with it, so candidates that had tied are told apart, and the totals reported are larger.
+
 ## 0.10.1 - 2026-08-16
 
 ### Fixed

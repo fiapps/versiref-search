@@ -171,8 +171,8 @@ def analyze_documents(
     versifications = {name: Versification.named(name) for name in candidates}
 
     # Any versification will do for scanning; pick the first candidate.
-    # BibleRef isn't hashable, so dedupe by the canonical formatted form
-    # — this folds "Lk 1:28" and "Luke 1:28" into the same pool entry.
+    # Dedupe by the canonical formatted form, which folds together
+    # references that differ only in a trailing versification designator.
     parser = RefParser(ref_style, next(iter(versifications.values())))
     pool: dict[str, BibleRef] = {}
     for raw_path in input_paths:
@@ -186,9 +186,9 @@ def analyze_documents(
         valid = 0
         total = 0
         for ref in pool.values():
-            for sr in ref.simple_refs:
+            for verse_range in ref.ranges:
                 total += 1
-                if sr.is_valid(vers):
+                if BibleRef([verse_range], vers).is_valid():
                     valid += 1
         scores.append(VersificationScore(name=name, valid=valid, total=total))
 

@@ -96,7 +96,7 @@ def _scope_ranges(
     if ref is None:
         logger.warning('Scope reference "%s" could not be parsed; ignoring.', value)
         return []
-    if not all(vers.includes(sr.book_id) for sr in ref.simple_refs):
+    if not all(vers.includes(book) for book in ref.books()):
         logger.warning(
             'Scope reference "%s" refers to a book not in the '
             '"%s" versification; ignoring.',
@@ -104,7 +104,7 @@ def _scope_ranges(
             versification,
         )
         return []
-    if ref.versification is not None and ref.versification.identifier != versification:
+    if ref.versification is not None and ref.versification is not vers:
         mapped = ref.map_to(vers)
         if mapped is None:
             logger.warning(
@@ -274,7 +274,7 @@ def index_document(
                 block.text, sensitivity=parser_sensitivity
             ):
                 # Check if all books in the ref are in the versification
-                if not all(vers.includes(sr.book_id) for sr in ref.simple_refs):
+                if not all(vers.includes(book) for book in ref.books()):
                     ref_text = block.text[start_pos:end_pos]
                     logger.warning(
                         'Reference "%s" refers to a book not in the '
@@ -302,10 +302,7 @@ def index_document(
                 # The scanner may tag a reference with a foreign versification
                 # (e.g. "Ps 50:1 Vulg."). Map it into the database's scheme so
                 # range keys are derived in the database's versification.
-                if (
-                    ref.versification is not None
-                    and ref.versification.identifier != versification
-                ):
+                if ref.versification is not None and ref.versification is not vers:
                     mapped = ref.map_to(vers)
                     if mapped is None:
                         ref_text = block.text[start_pos:end_pos]

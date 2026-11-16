@@ -272,11 +272,11 @@ class TestCrossVersificationMapping:
     def test_foreign_reference_stored_under_mapped_key(self, tmp_path):
         """A Vulgate reference is stored under its mapped eng key.
 
-        'Ps 50:1 Vulg.' in an eng database must be stored under the eng key
-        for Ps 51:1 (1905100100), not the raw vulgata key (1805000100).
+        'Ps 50:3 Vulg.' in an eng database must be stored under the eng key
+        for Ps 51:1 (1905100100), not the raw vulgata key (1905000300).
         """
         md = tmp_path / "test.md"
-        md.write_text("Compare Ps 50:1 Vulg. with the psalm.", encoding="utf-8")
+        md.write_text("Compare Ps 50:3 Vulg. with the psalm.", encoding="utf-8")
         db_path = tmp_path / "out.db"
         index_document(
             input_path=md,
