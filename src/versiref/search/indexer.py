@@ -6,12 +6,16 @@ from typing import Literal
 from pathlib import Path
 from versiref import Versification, RefParser, RefStyle, Sensitivity
 
+from .analyzer import _scan_unrecognized
 from .database import Database, PRODUCT_NAME, SCHEMA_VERSION
 from .markdown_parser import parse_markdown, split_frontmatter
 
 logger = logging.getLogger(__name__)
 
 InvalidRefAction = Literal["warn", "exclude", "ignore"]
+
+# A book number and the abbreviation it qualifies, as in "1 PL".
+_NUMBERED_BOOK_RE = re.compile(r"(?:[1-4]|[IV]+)\s+(.+)")
 
 # Metadata keys the index writes for itself. A document's own metadata must not
 # overwrite them: "format" and "schema_version" are what identify the file as a
@@ -26,45 +30,33 @@ def find_unrecognized_abbreviations(
 ) -> dict[str, str]:
     """Find potential Bible abbreviations not recognized by the ref_style.
 
-    Scans text with a regex for patterns that look like Bible references
-    (e.g., "Lk 1:28", "1 Sam 3:4") and reports any whose book abbreviation
-    is not in ref_style.recognized_names.
+    Scans text for patterns that look like Bible references (e.g., "Lk 1:28",
+    "1 Sam 3:4", or "Gen. IX, 1" in a style with Roman chapter numbers) and
+    reports any whose book abbreviation is not in ref_style.recognized_names.
+    The scan is the one the ``analyze`` command uses, so the two agree on
+    what counts as an abbreviation.
 
     Args:
         text: The text to scan.
         ref_style: RefStyle whose recognized_names are checked.
-        whitelist: Optional list of abbreviations to ignore.
+        whitelist: Optional list of abbreviations to ignore. An entry also
+            covers the same abbreviation written with a trailing period or
+            after a book number, so "PL" covers "PL." and "1 PL".
 
     Returns:
         Dict mapping each unrecognized abbreviation to an example of its usage.
 
     """
-    sep = re.escape(ref_style.chapter_verse_separator)
-    pattern = rf"((?:[1-4]|[IV]+)\s+)?(\w[\w()]*)\s+\d+{sep}\d+"
-    whitelist_set = set(whitelist) if whitelist else set()
+    whitelist_set = {entry.rstrip(".") for entry in whitelist} if whitelist else set()
     unrecognized: dict[str, str] = {}
-    for match in re.finditer(pattern, text):
-        leading = match.group(1)
-        book_name = match.group(2)
-        if leading:
-            abbrev = leading + book_name  # e.g., "1 Sam"
-        else:
-            abbrev = book_name
-        # Skip if the book_name part is purely digits (e.g. "1 39:243" is not a reference)
-        if book_name.isdigit():
+    for abbrev, example in _scan_unrecognized(text, ref_style).items():
+        bare = abbrev.rstrip(".")
+        if bare in whitelist_set:
             continue
-        # Skip if recognized (check full abbrev, or book_name part for numbered books)
-        if abbrev in ref_style.recognized_names:
+        numbered = _NUMBERED_BOOK_RE.match(bare)
+        if numbered and numbered.group(1) in whitelist_set:
             continue
-        if leading and book_name in ref_style.recognized_names:
-            continue
-        if abbrev in whitelist_set:
-            continue
-        # Also skip if the book_name part alone is whitelisted (covers "1 PL", "3 PL", etc.)
-        if leading and book_name in whitelist_set:
-            continue
-        if abbrev not in unrecognized:
-            unrecognized[abbrev] = match.group(0)
+        unrecognized[abbrev] = example
     for abbrev, example in unrecognized.items():
         logger.warning('Unrecognized abbreviation "%s" in "%s".', abbrev, example)
     return unrecognized

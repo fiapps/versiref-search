@@ -231,6 +231,26 @@ class TestFindUnrecognizedAbbreviations:
             result = find_unrecognized_abbreviations(text, ref_style)
         assert result == {}
 
+    def test_dotted_abbreviation_is_checked(self, ref_style):
+        result = find_unrecognized_abbreviations("See Foo. 3:4.", ref_style)
+        assert "Foo." in result
+
+    def test_roman_chapter_style_is_checked(self):
+        style = RefStyle.from_dict(
+            {
+                "names": "la-vetus_abbreviationes",
+                "chapter_verse_separator": ", ",
+                "chapter_number_style": "roman",
+            }
+        )
+        result = find_unrecognized_abbreviations("Vide Foo. III, 2.", style)
+        assert "Foo." in result
+
+    def test_whitelist_covers_dotted_and_numbered_forms(self, ref_style):
+        text = "See PL. 39:243, 1 PL 2:3, and PG 4:5."
+        result = find_unrecognized_abbreviations(text, ref_style, whitelist=["PL"])
+        assert list(result) == ["PG"]
+
     def test_non_default_separator(self, caplog):
         """With a '.' separator, 'PL 39.243' should be detected."""
         dot_style = RefStyle(

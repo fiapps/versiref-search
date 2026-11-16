@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A metadata file with a `format`, `schema_version`, or `versification_scheme` key no longer produces a database that cannot be read. These keys belong to the index itself; they are now reported with a warning and not stored.
 - `analyze` no longer exits with "Unknown book ID" when the text cites a book that the style recognizes only through `also_recognize`.
 - The search documentation said that combining `-r` and `-s` returns only blocks matching both; it returns blocks matching either, as it always has.
+- The unrecognized-abbreviation check made when indexing now sees abbreviations written with a trailing period (`Foo. 3:4`) and references with Roman-numeral chapters, as `analyze` already did. Both went unreported before, so expect new warnings when re-indexing a source that has them.
 
 ## 0.10.1 - 2026-08-16
 
