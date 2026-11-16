@@ -636,7 +636,7 @@ def test_show_page_not_found(tmp_path):
 def test_show_page_rejects_other_modes(tmp_path):
     db = _make_db(tmp_path, "paged", PAGED_MD, "Paged")
     runner = CliRunner()
-    result = runner.invoke(main, ["show", str(db), "--page", "53", "--start", "1"])
+    result = runner.invoke(main, ["show", str(db), "--page", "53", "--end", "1"])
     assert result.exit_code != 0
     assert "cannot be combined" in result.output
 
@@ -685,7 +685,7 @@ def test_show_marg_not_found(tmp_path):
 def test_show_marg_rejects_other_modes(tmp_path):
     db = _make_db(tmp_path, "marg", MARG_MD, "Marg")
     runner = CliRunner()
-    result = runner.invoke(main, ["show", str(db), "--marg", "667", "--start", "1"])
+    result = runner.invoke(main, ["show", str(db), "--marg", "667", "--end", "1"])
     assert result.exit_code != 0
     assert "cannot be combined" in result.output
 
@@ -738,3 +738,71 @@ def test_search_string_and_phrase_cannot_be_combined(tmp_path):
     result = runner.invoke(main, ["search", str(db), "-s", "God", "-p", "bearer"])
     assert result.exit_code != 0
     assert "cannot be combined" in result.output
+
+
+# --- Document boundaries in a multi-file database ---
+
+DOC_A_MD = """\
+# Doc A
+
+<!-- page: 5 -->
+Doc A page five cites Lk 1:28.
+
+<!-- page: 6 -->
+Doc A page six.
+"""
+
+DOC_B_MD = """\
+Doc B has no heading, citing Rom 3:23.
+
+<!-- page: 5 -->
+Doc B page five.
+"""
+
+
+def _make_two_document_db(tmp_path: Path) -> Path:
+    paths = []
+    for name, content in (("a", DOC_A_MD), ("b", DOC_B_MD)):
+        path = tmp_path / f"{name}.md"
+        path.write_text(content, encoding="utf-8")
+        paths.append(str(path))
+    meta = tmp_path / "meta.yaml"
+    meta.write_text("title: Two\nversification: eng\n", encoding="utf-8")
+    db = tmp_path / "two.db"
+    result = CliRunner().invoke(main, ["index", *paths, "-o", str(db), "-m", str(meta)])
+    assert result.exit_code == 0, result.output
+    return db
+
+
+def test_search_result_does_not_inherit_from_earlier_document(tmp_path):
+    db = _make_two_document_db(tmp_path)
+    result = CliRunner().invoke(main, ["search", str(db), "-r", "Rom 3:23"])
+    assert result.exit_code == 0
+    assert "[Block 4]" in result.output
+    assert "Doc A" not in result.output
+    assert "page" not in result.output
+
+
+def test_show_page_recorded_twice_lists_candidates(tmp_path):
+    db = _make_two_document_db(tmp_path)
+    result = CliRunner().invoke(main, ["show", str(db), "--page", "5"])
+    assert result.exit_code != 0
+    assert "more than one place" in result.output
+    assert "block 2 (a.md)" in result.output
+    assert "block 5 (b.md)" in result.output
+
+
+def test_show_page_with_start_picks_a_candidate(tmp_path):
+    db = _make_two_document_db(tmp_path)
+    result = CliRunner().invoke(main, ["show", str(db), "--page", "5", "--start", "5"])
+    assert result.exit_code == 0
+    assert "Doc B page five" in result.output
+    assert "Doc A" not in result.output
+
+
+def test_show_page_stops_at_document_end(tmp_path):
+    db = _make_two_document_db(tmp_path)
+    result = CliRunner().invoke(main, ["show", str(db), "--page", "6"])
+    assert result.exit_code == 0
+    assert "Doc A page six" in result.output
+    assert "Doc B" not in result.output

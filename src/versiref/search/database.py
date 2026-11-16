@@ -28,8 +28,23 @@ PRODUCT_NAME = "versiref-search"
 # REQUIRED_SCHEMA_VERSION is the oldest schema this code can read. They
 # differ when new tables are optional at query time (queries against the
 # new tables return empty results on older databases).
-SCHEMA_VERSION = "2.0"
+#
+# Version 2.1 adds two conventions to the milestone table, with no change to
+# its layout. A milestone of type DOCUMENT_MILESTONE marks the first block of
+# each source document, so that page and marg values and heading context stop
+# at the document they belong to; and a page or marg milestone whose value is
+# MILESTONE_END says that no value is in effect from that point on. A 2.0
+# database has neither and is read as before.
+SCHEMA_VERSION = "2.1"
 REQUIRED_SCHEMA_VERSION = "2.0"
+
+# Milestone type marking the first block of a source document. Its value is
+# the document's file name. It cannot be written in a source document, where
+# only the types in the milestone comment syntax are recognized.
+DOCUMENT_MILESTONE = "document"
+
+# Milestone value ending the run of the previous value of the same type.
+MILESTONE_END = "end"
 
 
 class IncompatibleDatabaseError(Exception):
@@ -377,9 +392,13 @@ class Database:
             char_offset: Character position within the block (default: block
                 start, which still counts milestones recorded at offset 0)
 
+        Only milestones of the block's own document count, and an end marker
+        (:data:`MILESTONE_END`) leaves no value in effect.
+
         Returns:
-            Milestone value, or None if no milestone of this type precedes
-            the position (including databases without a milestone table).
+            Milestone value, or None if no milestone of this type is in
+            effect at the position (including databases without a milestone
+            table).
 
         """
         if not self.conn:
@@ -390,10 +409,95 @@ class Database:
         cursor = self.conn.execute(
             """SELECT value FROM milestone
                WHERE type = ?
+                 AND content_id >= ?
                  AND (content_id < ? OR (content_id = ? AND char_offset <= ?))
                ORDER BY content_id DESC, char_offset DESC
                LIMIT 1""",
-            (milestone_type, content_id, content_id, char_offset),
+            (
+                milestone_type,
+                self.get_document_start(content_id) or 0,
+                content_id,
+                content_id,
+                char_offset,
+            ),
+        )
+        row = cursor.fetchone()
+        if row is None or row["value"] == MILESTONE_END:
+            return None
+        value: str = row["value"]
+        return value
+
+    def get_document_start(self, content_id: int) -> int | None:
+        """Get the first block of the source document a block belongs to.
+
+        Args:
+            content_id: Content block ID
+
+        Returns:
+            Content ID of the document's first block, or None if the database
+            records no document boundary at or before the block (as in one
+            indexed before boundaries were recorded).
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("milestone"):
+            return None
+
+        cursor = self.conn.execute(
+            "SELECT MAX(content_id) AS id FROM milestone "
+            "WHERE type = ? AND content_id <= ?",
+            (DOCUMENT_MILESTONE, content_id),
+        )
+        start: int | None = cursor.fetchone()["id"]
+        return start
+
+    def get_next_document_start(self, content_id: int) -> int | None:
+        """Get the first block of the next source document after a block.
+
+        Args:
+            content_id: Content block ID
+
+        Returns:
+            Content ID of the first block of the following document, or None
+            if the block is in the last (or only) document.
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("milestone"):
+            return None
+
+        cursor = self.conn.execute(
+            "SELECT MIN(content_id) AS id FROM milestone "
+            "WHERE type = ? AND content_id > ?",
+            (DOCUMENT_MILESTONE, content_id),
+        )
+        start: int | None = cursor.fetchone()["id"]
+        return start
+
+    def get_document_name(self, content_id: int) -> str | None:
+        """Get the file name of the source document a block belongs to.
+
+        Args:
+            content_id: Content block ID
+
+        Returns:
+            The document's file name, or None if the database records no
+            document boundary at or before the block.
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("milestone"):
+            return None
+
+        cursor = self.conn.execute(
+            """SELECT value FROM milestone
+               WHERE type = ? AND content_id <= ?
+               ORDER BY content_id DESC
+               LIMIT 1""",
+            (DOCUMENT_MILESTONE, content_id),
         )
         row = cursor.fetchone()
         return row["value"] if row else None
@@ -451,6 +555,8 @@ class Database:
             start_id: First content block ID (inclusive)
             end_id: Last content block ID (inclusive)
 
+        End markers are passed over: the result is the last real value.
+
         Returns:
             Milestone value, or None if the range holds no milestone of this
             type (including databases without a milestone table).
@@ -463,27 +569,57 @@ class Database:
 
         cursor = self.conn.execute(
             """SELECT value FROM milestone
-               WHERE type = ? AND content_id BETWEEN ? AND ?
+               WHERE type = ? AND value != ? AND content_id BETWEEN ? AND ?
                ORDER BY content_id DESC, char_offset DESC
                LIMIT 1""",
-            (milestone_type, start_id, end_id),
+            (milestone_type, MILESTONE_END, start_id, end_id),
         )
         row = cursor.fetchone()
         return row["value"] if row else None
 
+    def find_milestone_blocks(self, milestone_type: str, value: str) -> list[int]:
+        """Get the blocks in which a milestone value is recorded.
+
+        A value is normally recorded once, but a database built from several
+        documents may hold the same page number in each.
+
+        Args:
+            milestone_type: Milestone type to look up (e.g. "page", "marg")
+            value: Milestone value to look up (exact match)
+
+        Returns:
+            Content IDs holding a milestone with this value, in document
+            order. Empty on databases without a milestone table.
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("milestone"):
+            return []
+
+        cursor = self.conn.execute(
+            """SELECT DISTINCT content_id FROM milestone
+               WHERE type = ? AND value = ?
+               ORDER BY content_id""",
+            (milestone_type, value),
+        )
+        return [row["content_id"] for row in cursor.fetchall()]
+
     def get_milestone_range(
-        self, milestone_type: str, value: str
+        self, milestone_type: str, value: str, from_block: int | None = None
     ) -> tuple[int, int] | None:
         """Get the content-block span covered by a milestone value.
 
         The span runs from the block holding the milestone through the block
         holding the next milestone of the same type (inclusive, since a
-        marker can fall mid-block), or through the last block if it is the
-        last one recorded.
+        marker can fall mid-block) — an end marker counts as one — or through
+        the last block of the milestone's document if no other follows in it.
 
         Args:
             milestone_type: Milestone type to look up (e.g. "page", "marg")
             value: Milestone value to look up (exact match)
+            from_block: Take the first milestone with this value at or after
+                this content ID, rather than the first in the database
 
         Returns:
             Tuple of (start_id, end_id), or None if no such milestone
@@ -497,15 +633,23 @@ class Database:
 
         cursor = self.conn.execute(
             """SELECT content_id, char_offset FROM milestone
-               WHERE type = ? AND value = ?
+               WHERE type = ? AND value = ? AND content_id >= ?
                ORDER BY content_id, char_offset
                LIMIT 1""",
-            (milestone_type, value),
+            (milestone_type, value, from_block or 0),
         )
         row = cursor.fetchone()
         if row is None:
             return None
         start_id, start_offset = row["content_id"], row["char_offset"]
+
+        max_id = self.get_max_content_id()
+        assert max_id is not None  # a milestone implies at least one block
+        end_id: int = max_id
+
+        next_document = self.get_next_document_start(start_id)
+        if next_document is not None:
+            end_id = next_document - 1
 
         cursor = self.conn.execute(
             """SELECT content_id FROM milestone
@@ -517,11 +661,9 @@ class Database:
         )
         row = cursor.fetchone()
         if row is not None:
-            return start_id, row["content_id"]
+            end_id = min(end_id, row["content_id"])
 
-        max_id = self.get_max_content_id()
-        assert max_id is not None  # a milestone implies at least one block
-        return start_id, max_id
+        return start_id, end_id
 
     def get_milestone_values(self, milestone_type: str) -> list[str]:
         """Get all milestone values of a type, in document order.
@@ -530,8 +672,8 @@ class Database:
             milestone_type: Milestone type to look up (e.g. "page", "marg")
 
         Returns:
-            List of values in document order. Empty on databases without a
-            milestone table.
+            List of values in document order, without end markers. Empty on
+            databases without a milestone table.
 
         """
         if not self.conn:
@@ -541,9 +683,9 @@ class Database:
 
         cursor = self.conn.execute(
             """SELECT value FROM milestone
-               WHERE type = ?
+               WHERE type = ? AND value != ?
                ORDER BY content_id, char_offset""",
-            (milestone_type,),
+            (milestone_type, MILESTONE_END),
         )
         return [row["value"] for row in cursor.fetchall()]
 
@@ -821,7 +963,9 @@ class Database:
         immediate parent, and each further step looks only for a heading
         strictly shallower than the one already found. A heading at level N
         therefore closes every open heading at level >= N, and the returned
-        chain always has increasing levels and increasing block IDs.
+        chain always has increasing levels and increasing block IDs. The walk
+        stops at the start of the block's own document, so the headings of an
+        earlier document in the same database never enclose it.
 
         Args:
             content_id: Content block ID to search before
@@ -834,10 +978,13 @@ class Database:
             raise RuntimeError("Database not connected")
 
         headings: dict[int, tuple[int, str]] = {}
+        document_start = self.get_document_start(content_id) or 0
         before_id = content_id - 1
         max_level = 6
         while max_level >= 1:
-            heading = self.get_enclosing_heading(before_id, max_level)
+            heading = self.get_enclosing_heading(
+                before_id, max_level, min_id=document_start
+            )
             if heading is None:
                 break
             heading_id, heading_text, level = heading
@@ -847,7 +994,7 @@ class Database:
         return headings
 
     def get_enclosing_heading(
-        self, block_id: int, max_level: int
+        self, block_id: int, max_level: int, min_id: int = 0
     ) -> tuple[int, str, int] | None:
         """Get the nearest heading at or above a level that precedes a block.
 
@@ -859,6 +1006,8 @@ class Database:
         Args:
             block_id: Content block ID (inclusive — a heading at this ID counts)
             max_level: Highest (shallowest) heading level to consider
+            min_id: Earliest content ID to consider (inclusive), for keeping
+                the search inside one document
 
         Returns:
             Tuple of (id, block_text, heading_level), or None if no qualifying
@@ -871,10 +1020,11 @@ class Database:
         cursor = self.conn.execute(
             """SELECT id, block_text, heading_level
                FROM content
-               WHERE id <= ? AND heading_level IS NOT NULL AND heading_level <= ?
+               WHERE id <= ? AND id >= ?
+                 AND heading_level IS NOT NULL AND heading_level <= ?
                ORDER BY id DESC
                LIMIT 1""",
-            (block_id, max_level),
+            (block_id, min_id, max_level),
         )
         row = cursor.fetchone()
         return (row["id"], row["block_text"], row["heading_level"]) if row else None
@@ -985,13 +1135,20 @@ class Database:
         return row["count"]
 
     def count_milestones(self) -> int:
-        """Count milestone entries (0 on databases without the table)."""
+        """Count milestone entries (0 on databases without the table).
+
+        Document boundaries share the table but are not counted: they are
+        recorded by the indexer, not written in the source.
+        """
         if not self.conn:
             raise RuntimeError("Database not connected")
         if not self._table_exists("milestone"):
             return 0
 
-        cursor = self.conn.execute("SELECT COUNT(*) as count FROM milestone")
+        cursor = self.conn.execute(
+            "SELECT COUNT(*) as count FROM milestone WHERE type != ?",
+            (DOCUMENT_MILESTONE,),
+        )
         return cursor.fetchone()["count"]
 
     def count_scopes(self) -> int:

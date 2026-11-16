@@ -978,3 +978,130 @@ def test_phrase_and_string_cannot_be_combined(punctuated_db, ref_style):
 def test_invalid_string_expression_points_to_phrase(punctuated_db, ref_style):
     with pytest.raises(ValueError, match="phrase"):
         search_database(punctuated_db, ref_style, string_query="God-bearer")
+
+
+# --- End markers and document boundaries ---
+
+
+@pytest.fixture
+def end_marker_db(tmp_path, ref_style):
+    """Database where a page run and a marg run are each ended explicitly."""
+    md_path = tmp_path / "ended.md"
+    md_path.write_text(
+        "<!-- page: 10 -->\n<!-- marg: 3 -->\n"
+        "On page ten, Lk 1:28.\n\n"
+        "Still ten <!-- page: End --> then unpaginated, Rom 3:23.\n\n"
+        "<!-- marg: end -->\n"
+        "An appendix citing Jn 3:16.\n\n"
+        "<!-- page: 11 -->\n"
+        "Page eleven cites Ps 45:10.\n",
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "ended.db"
+    index_document(
+        input_path=md_path,
+        output_path=db_path,
+        metadata={"title": "T", "versification": "eng"},
+        ref_style=ref_style,
+    )
+    return db_path
+
+
+def test_end_marker_clears_the_value(end_marker_db, ref_style):
+    (hit,) = search_database(end_marker_db, ref_style, reference_query="Jn 3:16")
+    assert hit.page is None
+    assert hit.marg is None
+
+
+def test_block_holding_an_end_marker_reports_no_range(end_marker_db, ref_style):
+    (hit,) = search_database(end_marker_db, ref_style, reference_query="Rom 3:23")
+    assert (hit.page, hit.page_end) == ("10", None)
+    assert hit.marg == "3"
+    assert "<!-- page: end -->" in hit.block_text
+
+
+def test_value_resumes_after_an_end_marker(end_marker_db, ref_style):
+    (hit,) = search_database(end_marker_db, ref_style, reference_query="Ps 45:10")
+    assert hit.page == "11"
+    assert hit.marg is None
+
+
+def test_page_span_stops_at_its_end_marker(end_marker_db):
+    blocks = get_page_context(end_marker_db, "10")
+    assert [b.id for b in blocks] == [1, 2]
+
+
+def test_end_is_not_a_retrievable_value(end_marker_db):
+    with pytest.raises(ValueError, match="No page milestone 'end'"):
+        get_page_context(end_marker_db, "end")
+
+
+@pytest.fixture
+def two_document_db(tmp_path, ref_style):
+    """Database built from two documents that restart their page numbers."""
+    sources = {
+        "a.md": "# Doc A\n\n## Part\n\n<!-- page: 5 -->\nA five, Lk 1:28.\n\n"
+        "<!-- page: 6 -->\nA six.\n",
+        "b.md": "B opens, Rom 3:23.\n\n<!-- page: 5 -->\nB five.\n\n"
+        "## Part\n\nB part text.\n",
+    }
+    db_path = tmp_path / "two.db"
+    for position, (name, text) in enumerate(sources.items()):
+        md_path = tmp_path / name
+        md_path.write_text(text, encoding="utf-8")
+        index_document(
+            input_path=md_path,
+            output_path=db_path,
+            metadata={"title": "T", "versification": "eng"},
+            ref_style=ref_style,
+            append=position > 0,
+        )
+    return db_path
+
+
+def test_later_document_does_not_inherit_page_or_headings(two_document_db, ref_style):
+    (hit,) = search_database(two_document_db, ref_style, reference_query="Rom 3:23")
+    assert hit.block_id == 5
+    assert hit.page is None
+    assert hit.heading_context == {}
+
+
+def test_page_recorded_in_two_documents_is_ambiguous(two_document_db):
+    from versiref.search import AmbiguousMilestoneError
+
+    with pytest.raises(AmbiguousMilestoneError) as excinfo:
+        get_page_context(two_document_db, "5")
+    assert excinfo.value.candidates == [(3, "a.md"), (6, "b.md")]
+
+
+def test_start_id_chooses_among_ambiguous_pages(two_document_db):
+    blocks = get_page_context(two_document_db, "5", start_id=6, include_headings=False)
+    assert [b.id for b in blocks][0] == 6
+    with pytest.raises(ValueError, match="at or after block 7"):
+        get_page_context(two_document_db, "5", start_id=7)
+
+
+def test_page_span_stops_at_the_document_boundary(two_document_db):
+    blocks = get_page_context(two_document_db, "6", include_headings=False)
+    assert [b.id for b in blocks] == [4]
+
+
+def test_section_stops_at_the_document_boundary(two_document_db):
+    blocks = get_section_by_block(two_document_db, block_id=3, level=2)
+    assert [b.id for b in blocks] == [2, 3, 4]
+
+
+def test_section_lookup_does_not_reach_into_earlier_document(two_document_db):
+    with pytest.raises(ValueError):
+        get_section_by_block(two_document_db, block_id=5, level=2)
+
+
+def test_database_without_boundaries_reads_as_before(two_document_db, ref_style):
+    """A 2.0 database records no boundaries, so values carry across as they did."""
+    with Database(two_document_db) as db:
+        assert db.conn is not None
+        db.conn.execute("DELETE FROM milestone WHERE type = 'document'")
+        db.conn.commit()
+    (hit,) = search_database(two_document_db, ref_style, reference_query="Rom 3:23")
+    assert hit.page == "6"
+    assert 1 in hit.heading_context

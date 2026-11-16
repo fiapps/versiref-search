@@ -17,6 +17,7 @@ from versiref.search.models import (
     VersificationScore,
 )
 from versiref.search.searcher import (
+    AmbiguousMilestoneError,
     AmbiguousSectionError,
     SectionTooLargeError,
     get_context,
@@ -31,6 +32,7 @@ from versiref.search.searcher import (
 
 __all__ = [
     "AbbreviationAnalysis",
+    "AmbiguousMilestoneError",
     "AmbiguousSectionError",
     "BlockInfo",
     "Database",

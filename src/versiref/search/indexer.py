@@ -7,7 +7,13 @@ from pathlib import Path
 from versiref import Versification, RefParser, RefStyle, Sensitivity
 
 from .analyzer import _scan_unrecognized
-from .database import Database, PRODUCT_NAME, SCHEMA_VERSION
+from .database import (
+    DOCUMENT_MILESTONE,
+    MILESTONE_END,
+    PRODUCT_NAME,
+    SCHEMA_VERSION,
+    Database,
+)
 from .markdown_parser import parse_markdown, split_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -257,6 +263,11 @@ def index_document(
         for block in blocks:
             # Insert content block
             content_id = db.insert_content(block.text, block.heading_level)
+            if last_content_id is None:
+                # First block of this document: record the boundary, so that
+                # milestones and headings of an earlier document in the same
+                # database are not taken to apply to this one.
+                db.insert_milestone(DOCUMENT_MILESTONE, input_path.name, content_id, 0)
             last_content_id = content_id
 
             # A heading closes every open heading scope at its own level or
@@ -343,8 +354,12 @@ def index_document(
             # Milestones extracted from this block's source text
             for milestone in block.milestones:
                 if milestone.type in ("page", "marg"):
+                    # "end" in any letter case ends the run of the last value.
+                    value = milestone.value
+                    if value.strip().lower() == MILESTONE_END:
+                        value = MILESTONE_END
                     db.insert_milestone(
-                        milestone.type, milestone.value, content_id, milestone.offset
+                        milestone.type, value, content_id, milestone.offset
                     )
                 elif milestone.type == "scope":
                     if open_explicit is not None:

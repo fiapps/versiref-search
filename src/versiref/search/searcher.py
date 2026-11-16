@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from versiref import Versification, RefParser, RefStyle
 
-from .database import Database
+from .database import MILESTONE_END, Database
 from .models import (
     BlockInfo,
     RawMilestone,
@@ -43,6 +43,24 @@ class AmbiguousSectionError(Exception):
         """Record the matching headings for the caller to disambiguate."""
         self.candidates = candidates
         super().__init__(f"{len(candidates)} headings match the query")
+
+
+class AmbiguousMilestoneError(Exception):
+    """Raised when a page or marg value is recorded in more than one place.
+
+    A database built from several documents may hold the same page number in
+    each. Carries the ``noun`` for the milestone type, the ``value`` asked
+    for, and the ``candidates`` — a list of (block ID, document file name or
+    None) pairs, one per place the value is recorded — so callers can list
+    them for disambiguation.
+    """
+
+    def __init__(self, noun: str, value: str, candidates: list[tuple[int, str | None]]):
+        """Record the places the value was found."""
+        self.noun = noun
+        self.value = value
+        self.candidates = candidates
+        super().__init__(f"{noun} '{value}' is recorded in {len(candidates)} places")
 
 
 def _wrap_reference_spans(text: str, spans: set[tuple[int, int]]) -> str:
@@ -90,10 +108,15 @@ def _span_end(
 
     Returns:
         The last value of this type in the span, or None if the span records
-        none or ends on the value it started with.
+        none or ends on the value it started with. End markers are not values
+        and are passed over.
 
     """
-    values = [m.value for m in milestones if m.type == milestone_type]
+    values = [
+        m.value
+        for m in milestones
+        if m.type == milestone_type and m.value != MILESTONE_END
+    ]
     if not values or values[-1] == start_value:
         return None
     return values[-1]
@@ -456,6 +479,7 @@ def _get_milestone_context(
     noun: str,
     include_headings: bool,
     max_blocks: int,
+    start_id: int | None = None,
 ) -> list[BlockInfo]:
     """Get the content blocks covered by a milestone value.
 
@@ -474,6 +498,8 @@ def _get_milestone_context(
             (e.g. "page", "marg value")
         include_headings: Whether to include preceding headings before the span
         max_blocks: Maximum number of blocks before refusing
+        start_id: Take the first milestone with this value at or after this
+            block, to choose among several places the value is recorded
 
     Returns:
         List of BlockInfo objects in document order
@@ -481,17 +507,34 @@ def _get_milestone_context(
     Raises:
         ValueError: If the database has no milestones of this type, or none
             with this value (the message lists nearby recorded values)
+        AmbiguousMilestoneError: If the value is recorded in more than one
+            place and ``start_id`` does not choose among them
         SectionTooLargeError: If the span exceeds max_blocks
 
     """
-    span = db.get_milestone_range(milestone_type, value)
-    if span is None:
+    # An end marker is stored as a milestone but is not a value to retrieve.
+    found = (
+        []
+        if value == MILESTONE_END
+        else db.find_milestone_blocks(milestone_type, value)
+    )
+    if not found:
         values = db.get_milestone_values(milestone_type)
         if not values:
             raise ValueError(f"Database has no {noun} milestones")
         raise ValueError(
             f"No {noun} milestone '{value}'; "
             f"{_nearby_milestone_hint(value, values, noun)}"
+        )
+    if start_id is None and len(found) > 1:
+        raise AmbiguousMilestoneError(
+            noun, value, [(block, db.get_document_name(block)) for block in found]
+        )
+    span = db.get_milestone_range(milestone_type, value, from_block=start_id)
+    if span is None:
+        raise ValueError(
+            f"No {noun} milestone '{value}' at or after block {start_id}; "
+            f"it is recorded at block(s) {', '.join(str(b) for b in found)}"
         )
     start_id, end_id = span
 
@@ -518,6 +561,7 @@ def get_page_context(
     page: str,
     include_headings: bool = True,
     max_blocks: int = DEFAULT_MAX_SECTION_BLOCKS,
+    start_id: int | None = None,
 ) -> list[BlockInfo]:
     """Get the content blocks of a printed page.
 
@@ -533,6 +577,9 @@ def get_page_context(
         page: Page value to look up (exact match, e.g. "204" or "xvii")
         include_headings: Whether to include preceding headings before the span
         max_blocks: Maximum number of blocks before refusing
+        start_id: Take the first milestone with this value at or after this
+            block. Needed only when the value is recorded in more than one
+            place, as in a database built from several documents.
 
     Returns:
         List of BlockInfo objects in document order
@@ -541,6 +588,8 @@ def get_page_context(
         FileNotFoundError: If database doesn't exist
         IncompatibleDatabaseError: If the database is not a compatible
             versiref-search index
+        AmbiguousMilestoneError: If the value is recorded in more than one
+            place and ``start_id`` does not choose among them
         ValueError: If the database has no page milestones or no milestone
             with this value (the message lists nearby recorded pages)
         SectionTooLargeError: If the span exceeds max_blocks
@@ -553,7 +602,7 @@ def get_page_context(
     with Database(db_path) as db:
         db.validate_schema()
         return _get_milestone_context(
-            db, "page", page, "page", include_headings, max_blocks
+            db, "page", page, "page", include_headings, max_blocks, start_id
         )
 
 
@@ -562,6 +611,7 @@ def get_marg_context(
     marg: str,
     include_headings: bool = True,
     max_blocks: int = DEFAULT_MAX_SECTION_BLOCKS,
+    start_id: int | None = None,
 ) -> list[BlockInfo]:
     """Get the content blocks of a marginal-number-identified passage.
 
@@ -583,6 +633,9 @@ def get_marg_context(
             "652a")
         include_headings: Whether to include preceding headings before the span
         max_blocks: Maximum number of blocks before refusing
+        start_id: Take the first milestone with this value at or after this
+            block. Needed only when the value is recorded in more than one
+            place, as in a database built from several documents.
 
     Returns:
         List of BlockInfo objects in document order
@@ -591,6 +644,8 @@ def get_marg_context(
         FileNotFoundError: If database doesn't exist
         IncompatibleDatabaseError: If the database is not a compatible
             versiref-search index
+        AmbiguousMilestoneError: If the value is recorded in more than one
+            place and ``start_id`` does not choose among them
         ValueError: If the database has no marg milestones or no milestone
             with this value (the message lists nearby recorded values)
         SectionTooLargeError: If the span exceeds max_blocks
@@ -603,7 +658,7 @@ def get_marg_context(
     with Database(db_path) as db:
         db.validate_schema()
         return _get_milestone_context(
-            db, "marg", marg, "marg value", include_headings, max_blocks
+            db, "marg", marg, "marg value", include_headings, max_blocks, start_id
         )
 
 
@@ -833,6 +888,10 @@ def _collect_section(
         if max_id is None:
             return []
         last_id = max_id
+    # A section never runs on into the next document of the database.
+    next_document = db.get_next_document_start(end_anchor_id)
+    if next_document is not None:
+        last_id = min(last_id, next_document - 1)
 
     count = db.count_content_range(section_start_id, last_id)
     if count > max_blocks:
@@ -911,7 +970,9 @@ def get_section_by_block(
     with Database(db_path) as db:
         db.validate_schema()
 
-        enclosing = db.get_enclosing_heading(block_id, level)
+        enclosing = db.get_enclosing_heading(
+            block_id, level, min_id=db.get_document_start(block_id) or 0
+        )
         if enclosing is None:
             raise ValueError(
                 f"No heading at level {level} or above precedes block {block_id}"

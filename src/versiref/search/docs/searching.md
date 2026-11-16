@@ -245,7 +245,17 @@ The result runs from the block where the page begins through the block where the
 If the page value is not recorded, the error names the recorded pages around it — useful when page milestones are sparse.
 Page values compare naturally for this purpose: multi-part values like `2:84` (volume:page) compare part by part, and Roman-numeral pages (front matter) always sort before Arabic-numbered ones.
 With sparse milestones a "page" can span many blocks (everything up to the next recorded break), so the `--max-blocks` guard applies here as it does for sections.
-`--page` cannot be combined with the other `show` modes.
+A page ends at the next recorded page, at a `<!-- page: end -->` marker, or at the end of its source document, whichever comes first.
+
+A database built from several documents can record the same page number more than once.
+`show` then lists the places with their block IDs and source file names instead of guessing; add `--start` with one of those block IDs to choose:
+
+```sh
+versiref-search show collection.db --page 5 --start 412
+```
+
+`--start` selects the first page 5 recorded at or after that block.
+`--page` cannot be combined with `--end`, `--section`, or `--heading`.
 
 ### Retrieving a Marginal-Number Passage
 
@@ -255,7 +265,7 @@ For databases indexed with marg milestones, `--marg` retrieves the blocks of a m
 versiref-search show mybook.db --marg 652
 ```
 
-This works exactly like `--page` (same inclusive-span, sparse-milestone, and `--max-blocks` behavior; `--marg` cannot be combined with the other `show` modes), except the milestone type queried is `marg` instead of `page`.
+This works exactly like `--page` (same inclusive-span, sparse-milestone, end-of-run, repeated-value, and `--max-blocks` behavior, and the same restrictions on combining it with other options), except the milestone type queried is `marg` instead of `page`.
 Values with a trailing letter (e.g. `652a`, inserted between `652` and `653` in editions that do so) are looked up like any other value and sort correctly relative to their base number for the "nearby recorded values" hint on a miss, including runs long enough to continue past `z` by doubling the letter (`aa`, `bb`, `cc`, …) instead of restarting at `aa`, `ab`, `ac`, ….
 
 ## Table of Contents
@@ -336,7 +346,7 @@ Databases with milestones or commentary scopes also report those counts.
 
 | Option | Description |
 | ------ | ----------- |
-| `--start` | Starting block ID (inclusive); also the anchor block for `--section` |
+| `--start` | Starting block ID (inclusive); also the anchor block for `--section`, and the block from which `--page`/`--marg` look for a value recorded more than once |
 | `--end` | Ending block ID (inclusive); extends a `--section` request to span sections |
 | `--section` | Retrieve a whole section at this heading level (1–6) |
 | `--heading` | Select a section by matching its heading text (use with `--section`) |

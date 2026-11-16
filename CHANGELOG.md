@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `search --phrase` (`-p`) searches for text exactly as written. `--string` reads its argument as an FTS5 search expression, so ordinary text containing punctuation, such as "God-bearer" or "Isa 7:14", was refused with an obscure error; `--phrase` finds those words in sequence. `search_database` takes a matching `phrase_query` argument.
+- `<!-- page: end -->` and `<!-- marg: end -->` end the run of a page or marginal number, for material the number does not apply to, such as text added in an electronic edition or an appendix after the last numbered excerpt. Results there report no page, and `show --page` stops at the marker.
 
 ### Changed
 
 - Requires versiref 0.13.0, whose references hold their verse ranges directly and may span books. A range such as "Matt–John" or "1 Sam 31:1–2 Sam 1:27" is indexed and searched as a single range, and a reference to a verse the versification omits, such as the NABRE's Matthew 17:21, is valid again.
+- New databases carry schema version 2.1. Versions before this one can still open them, but do not know about document boundaries or end markers and show `end` as if it were a page.
 - A `--string` argument that is not a valid search expression is reported as such, with a pointer to `--phrase`, instead of as an unexpected error.
 - `analyze` scores each candidate versification by verse range instead of by each book of a reference. One verse that a versification lacks no longer counts against the other ranges cited with it, so candidates that had tied are told apart, and the totals reported are larger.
 
@@ -24,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `analyze` no longer exits with "Unknown book ID" when the text cites a book that the style recognizes only through `also_recognize`.
 - The search documentation said that combining `-r` and `-s` returns only blocks matching both; it returns blocks matching either, as it always has.
 - The unrecognized-abbreviation check made when indexing now sees abbreviations written with a trailing period (`Foo. 3:4`) and references with Roman-numeral chapters, as `analyze` already did. Both went unreported before, so expect new warnings when re-indexing a source that has them.
+- In a database built from several files, each file is now a document of its own: a file with no page numbers, marginal numbers, or headings no longer reports those of the file indexed before it, and a page or section retrieved with `show` stops at the end of its file. Databases built from several files should be re-indexed; existing ones are read as before.
+- `show --page` and `show --marg` no longer silently return the first match when the value is recorded more than once, as when each document of a collection restarts its page numbers. They list the places with their block IDs and file names, and `--start` chooses one.
 
 ## 0.10.1 - 2026-08-16
 

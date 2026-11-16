@@ -12,6 +12,7 @@ from .analyzer import analyze_abbreviations, analyze_documents
 from .indexer import index_document, get_index_stats
 from .models import AbbreviationAnalysis, VersificationScore
 from .searcher import (
+    AmbiguousMilestoneError,
     AmbiguousSectionError,
     DEFAULT_MAX_SECTION_BLOCKS,
     SectionTooLargeError,
@@ -593,8 +594,8 @@ def show(
       Range:            --start S --end E
       Section by block: --start S --section L  (add --end to span sections)
       Section by text:  --heading TEXT --section L
-      Page:             --page VALUE
-      Marginal number:  --marg VALUE
+      Page:             --page VALUE     (add --start to pick one of several)
+      Marginal number:  --marg VALUE     (add --start to pick one of several)
 
     Blocks are returned in document order.
     """
@@ -602,32 +603,28 @@ def show(
         if page_value is not None and marg_value is not None:
             raise click.UsageError("--page cannot be combined with --marg")
         if page_value is not None:
-            if any(
-                option is not None
-                for option in (start, end, section_level, heading_text)
-            ):
+            if any(option is not None for option in (end, section_level, heading_text)):
                 raise click.UsageError(
-                    "--page cannot be combined with --start/--end/--section/--heading"
+                    "--page cannot be combined with --end/--section/--heading"
                 )
             blocks = get_page_context(
                 db_path=database,
                 page=page_value,
                 include_headings=include_headings,
                 max_blocks=max_blocks,
+                start_id=start,
             )
         elif marg_value is not None:
-            if any(
-                option is not None
-                for option in (start, end, section_level, heading_text)
-            ):
+            if any(option is not None for option in (end, section_level, heading_text)):
                 raise click.UsageError(
-                    "--marg cannot be combined with --start/--end/--section/--heading"
+                    "--marg cannot be combined with --end/--section/--heading"
                 )
             blocks = get_marg_context(
                 db_path=database,
                 marg=marg_value,
                 include_headings=include_headings,
                 max_blocks=max_blocks,
+                start_id=start,
             )
         elif section_level is not None:
             if heading_text is not None:
@@ -699,6 +696,16 @@ def show(
             "Raise --max-blocks or use a deeper --section level.",
             err=True,
         )
+        sys.exit(1)
+    except AmbiguousMilestoneError as e:
+        click.echo(
+            f"Error: {e.noun} '{e.value}' is recorded in more than one place; "
+            "re-run with --start using one of these block IDs:",
+            err=True,
+        )
+        for block_id, document in e.candidates:
+            source = f" ({document})" if document else ""
+            click.echo(f"  block {block_id}{source}", err=True)
         sys.exit(1)
     except AmbiguousSectionError as e:
         click.echo(

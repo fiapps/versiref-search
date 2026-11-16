@@ -20,6 +20,9 @@ Index multiple files into one database:
 versiref-search index ch1.md ch2.md ch3.md -o mybook.db -m metadata.yaml
 ```
 
+Each file is a separate document within the database.
+Page numbers, marginal numbers, and headings apply only within the file that records them, so a file with none of its own does not inherit them from the file indexed before it.
+
 Use a config file for more control:
 
 ```sh
@@ -353,6 +356,27 @@ Some editions insert extra passages between two marginal numbers by appending a 
 That works as a plain value — index it with `<!-- marg: 652a -->` — and it also sorts correctly (`652` < `652a` < `652b` < `653`) for the "nearby recorded values" hint when a lookup misses.
 When a run of letters is long enough to exhaust the alphabet, Jurgens continues by doubling the letter rather than restarting at `aa`, `ab`, `ac`, …: the longest such run, between Rouet's 651 and 652, goes `651a` … `651z`, `651aa`, `651bb`, `651cc`, `651dd`.
 That sorts correctly too — a repeated-letter suffix of length *n* on the *k*-th letter is ordered as sub-ordinal `(n - 1) * 26 + k`.
+
+### Ending a Page or Marginal-Number Run
+
+A page or marginal number stays in effect until the next one, or the end of its file.
+Where material follows that the number does not apply to — text added in an electronic edition that is on no printed page, or an appendix after the last numbered excerpt — end the run with the value `end`:
+
+```markdown
+The last paragraph of page 311.
+
+<!-- page: end -->
+
+A note added in the electronic edition.
+
+<!-- page: 312 -->
+
+Text of page 312.
+```
+
+Results in the note report no page, and `show --page 311` stops where the run ends.
+`<!-- marg: end -->` works the same way.
+The value `end` (in any letter case) is therefore reserved and cannot name a page or marginal number.
 
 ### Scope Milestones
 
