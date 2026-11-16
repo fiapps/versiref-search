@@ -172,7 +172,7 @@ This allows searching for "Isaiah 7:14" to match documents citing "Isaiah 7:7-16
 This project uses `uv_build` as the build backend (specified in pyproject.toml). The module is configured as a namespace package under `versiref.search`.
 
 Key configuration:
-- Build backend: `uv_build>=0.9.28,<0.10.0`
+- Build backend: `uv_build>=0.13.5,<0.14.0`
 - Module name: `versiref.search`
 - Package includes a `py.typed` marker for type checking support
 
