@@ -382,3 +382,14 @@ def test_caller_supplied_frontmatter_is_not_reparsed(caplog):
         blocks = parse_markdown(body, frontmatter=frontmatter)
     assert [b.text for b in blocks] == ["# Doc", "Body."]
     assert caplog.text == ""
+
+
+def test_ordered_list_keeps_its_starting_number():
+    """A numbered paragraph is a one-item list; its number must survive."""
+    blocks = parse_markdown("42. The Lord says.\n\nPlain.\n\n43. Next.\n")
+    assert [b.text for b in blocks] == ["42. The Lord says.", "Plain.", "43. Next."]
+
+
+def test_ordered_list_counts_up_from_its_start():
+    blocks = parse_markdown("7. Seven\n8. Eight\n")
+    assert blocks[0].text == "7. Seven\n8. Eight"

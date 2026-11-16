@@ -415,9 +415,14 @@ def _extract_list_text(token: dict[str, Any]) -> str:
     token_type = token.get("type")
 
     if token_type == "list":
-        ordered = token.get("attrs", {}).get("ordered", False)
+        attrs = token.get("attrs", {})
+        ordered = attrs.get("ordered", False)
+        # Number from where the source did: "42." opening a numbered paragraph
+        # is that paragraph's citation handle, not an arbitrary list ordinal.
+        start = attrs.get("start")
+        first = start if isinstance(start, int) else 1
         items = []
-        for i, child in enumerate(token.get("children", []), start=1):
+        for i, child in enumerate(token.get("children", []), start=first):
             item_text = _extract_list_text(child)
             if item_text:
                 if ordered:
