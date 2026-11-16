@@ -32,6 +32,11 @@ _TYPED_COMMENT_RE = re.compile(r"<!--\s*([A-Za-z]+)\s*:.*?-->")
 # that shares a couple of letters ("date", "note", "image").
 _MISSPELLING_CUTOFF = 0.7
 
+# Words in their own right that fall within the cutoff of a milestone type.
+# An author who writes one of these means it: a corpus may keep marginal
+# notes in <!-- margin: ... --> comments by the thousand.
+_NOT_MISSPELLINGS = frozenset({"data", "margin", "mark", "update"})
+
 # YAML frontmatter: a "---" fence on the very first line, closed by a line of
 # "---" or "...". Markdown itself has no notion of frontmatter, so left in
 # place the opening fence parses as a thematic break and the closing one as a
@@ -108,7 +113,8 @@ def find_misspelled_milestones(text: str) -> list[tuple[str, str]]:
     A comment such as ``<!-- pgae: 204 -->`` is not a milestone, so it stays
     in the text and records nothing, which is almost never what its author
     meant. Only types resembling a real one are reported: an unrelated
-    ``<!-- TODO: ... -->`` or ``<!-- note: ... -->`` is left alone.
+    ``<!-- TODO: ... -->`` or ``<!-- note: ... -->`` is left alone, and so is
+    a type that is an ordinary word, such as ``<!-- margin: ... -->``.
 
     Args:
         text: Block text from which recognized milestones have been stripped
@@ -119,8 +125,11 @@ def find_misspelled_milestones(text: str) -> list[tuple[str, str]]:
     """
     suspects: list[tuple[str, str]] = []
     for match in _TYPED_COMMENT_RE.finditer(text):
+        written = match.group(1).lower()
+        if written in _NOT_MISSPELLINGS:
+            continue
         close = difflib.get_close_matches(
-            match.group(1).lower(), MILESTONE_TYPES, n=1, cutoff=_MISSPELLING_CUTOFF
+            written, MILESTONE_TYPES, n=1, cutoff=_MISSPELLING_CUTOFF
         )
         if close:
             suspects.append((match.group(0), close[0]))

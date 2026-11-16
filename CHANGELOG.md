@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- Indexing no longer warns that `<!-- margin: ... -->`, `<!-- mark: ... -->`, `<!-- data: ... -->`, and `<!-- update: ... -->` comments look like misspelled milestones. These are ordinary words that an author may use on purpose, as a corpus that keeps its marginal notes in `margin` comments does.
+
 ## 0.11.0 - 2026-11-16
 
 ### Added
