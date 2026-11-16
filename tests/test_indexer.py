@@ -759,3 +759,26 @@ def test_milestone_in_block_after_stripped_frontmatter(tmp_path, ref_style):
     assert "<!-- page: 41 -->" not in text
     assert text[: marker.offset].endswith("PRIMATES, ")
     assert text[marker.offset :].startswith("ARCHBISHOPS")
+
+
+def test_reserved_metadata_keys_are_not_stored(tmp_path, minimal_md, ref_style, caplog):
+    """A document's metadata cannot overwrite the keys that identify the index."""
+    db_path = tmp_path / "reserved.db"
+    with caplog.at_level(logging.WARNING, logger="versiref.search.indexer"):
+        index_document(
+            input_path=minimal_md,
+            output_path=db_path,
+            metadata={
+                "title": "T",
+                "versification": "eng",
+                "format": "book",
+                "schema_version": "9.9",
+                "versification_scheme": "lxx",
+            },
+            ref_style=ref_style,
+        )
+    assert 'Metadata key "format" is reserved' in caplog.text
+    metadata = get_index_stats(db_path)["metadata"]  # raises if unreadable
+    assert metadata["format"] == "versiref-search"
+    assert metadata["schema_version"] == SCHEMA_VERSION
+    assert metadata["versification_scheme"] == "eng"

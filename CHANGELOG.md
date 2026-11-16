@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Numbered list items keep the numbers they were written with. A paragraph opening `42.` reads as a one-item list in Markdown and was stored as `1.`, losing the number the text is cited by. Databases built from sources with numbered paragraphs should be re-indexed.
+- A metadata file with a `format`, `schema_version`, or `versification_scheme` key no longer produces a database that cannot be read. These keys belong to the index itself; they are now reported with a warning and not stored.
 
 ## 0.10.1 - 2026-08-16
 

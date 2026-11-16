@@ -115,7 +115,8 @@ description: Verse-by-verse commentary on Romans; passages are numbered and cros
 ---
 ```
 
-All key-value pairs are stored in the database.
+All key-value pairs are stored in the database, except `format`, `schema_version`, and `versification_scheme`.
+The index uses those three keys for itself, so it reports them with a warning and does not store their values.
 List values are joined with " and " (e.g., multiple authors).
 
 ### Required Keys

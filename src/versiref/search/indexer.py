@@ -13,6 +13,11 @@ logger = logging.getLogger(__name__)
 
 InvalidRefAction = Literal["warn", "exclude", "ignore"]
 
+# Metadata keys the index writes for itself. A document's own metadata must not
+# overwrite them: "format" and "schema_version" are what identify the file as a
+# readable versiref-search database.
+RESERVED_METADATA_KEYS = frozenset({"format", "schema_version", "versification_scheme"})
+
 
 def find_unrecognized_abbreviations(
     text: str,
@@ -238,6 +243,13 @@ def index_document(
         for key, value in metadata.items():
             if key == "versification":
                 continue  # already stored as versification_scheme
+            if key in RESERVED_METADATA_KEYS:
+                logger.warning(
+                    'Metadata key "%s" is reserved for the index itself; '
+                    "not storing its value.",
+                    key,
+                )
+                continue
             db.set_metadata(key, _normalize_metadata_value(value))
 
         # Index each block
