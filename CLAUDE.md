@@ -73,11 +73,11 @@ Run after any lockfile change and before each release.
 
 ### Core Data Model
 
-The system uses SQLite databases (one per source document) with three main tables:
+The system uses SQLite databases (one per index, built from one or more source documents) with these tables:
 
 1. **content**: Stores Markdown blocks in document order
    - `id`: Sequential primary key (determines display order)
-   - `block_text`: Markdown text for one block-level element
+   - `block_text`: Markdown text for one block-level element, with milestone comments stripped
    - `heading_level`: Integer 1-6 for headings, NULL otherwise
 
 2. **content_fts**: FTS5 virtual table for full-text search on `block_text`
@@ -90,7 +90,19 @@ The system uses SQLite databases (one per source document) with three main table
    - `char_start`/`char_end`: Character positions in block_text
    - Multiple rows per content block if multiple references exist
 
-4. **metadata**: Key-value pairs (title, versification_scheme, lang, author, etc.)
+4. **milestone**: Point markers in the text: `(type, value, content_id, char_offset)`
+   - Types `page`, `marg`, and `date` come from `<!-- type: value -->` comments in the source (and `date` from frontmatter); a value stays in effect until the next one of its type
+   - The value `end` ends a run, leaving no value in effect
+   - Type `document` is written by the indexer at the first block of each source file, with the file name as its value; milestone and heading lookups stop at this boundary
+
+5. **commentary_scope**: Which passage a span of blocks comments on: `(block_start, block_end, verse_start, verse_end)`
+   - From `<!-- scope: ... -->` markers, or from headings when `commentary_headings` is set
+
+6. **metadata**: Key-value pairs (title, lang, author, etc.)
+   - `format`, `schema_version`, and `versification_scheme` are written by the indexer and cannot be set from a metadata file
+
+The schema version (`SCHEMA_VERSION` in `database.py`, currently 2.1) is independent of the package version.
+A minor bump is additive; a major bump rejects older databases and requires re-indexing.
 
 ### Verse Encoding
 
@@ -115,37 +127,34 @@ This allows searching for "Isaiah 7:14" to match documents citing "Isaiah 7:7-16
 
 ## Implementation Status
 
-**Current Phase**: Phase 1 complete
-
 **Source modules** (under `src/versiref/search/`):
-- `models.py`: Core data types (`BlockInfo`, `SearchResult`)
+- `models.py`: Core data types (`BlockInfo`, `RawMilestone`, `SearchResult`, `ScopeResult`, analysis results)
 - `database.py`: SQLite schema creation and access
-- `markdown_parser.py`: Markdown block parsing
-- `indexer.py`: Builds SQLite index from a Markdown file
-- `searcher.py`: Queries the index by reference or string
+- `markdown_parser.py`: Markdown block parsing, frontmatter splitting, milestone extraction
+- `indexer.py`: Builds a SQLite index from one or more Markdown files
+- `searcher.py`: Queries the index by reference, string, or phrase; retrieves ranges, sections, pages, marginal-number passages, and dated documents
+- `analyzer.py`: Reports unrecognized abbreviations and ranks versifications for a source text
 - `cli.py`: Click-based CLI entry point
 - `__init__.py`: Public API exports
 
-**CLI entry point**: `versiref-search` with subcommands `index`, `search`, `show`
+**CLI entry point**: `versiref-search` with subcommands `index`, `analyze`, `search`, `show`, `toc`, `info`, `docs`
 
-**Test modules** (under `tests/`): covers all non-CLI modules
+**Test modules** (under `tests/`): one per source module, including the CLI
 
-**Implemented Components**:
-1. **Indexing module**: `indexer.py` + CLI `index` command — parses Markdown and builds SQLite databases
-2. **Search module**: `searcher.py` + CLI `search` and `show` commands — queries databases by reference or string
-3. **Python API**: Public interface exported from `__init__.py`
+**Not yet implemented**: boolean operators combining reference and string queries (a combined search returns blocks matching either)
 
 ## Key Dependencies
 
-- **versiref** (>=0.3.0): For parsing and manipulating Bible references
+- **versiref** (>=0.13.0): For parsing and manipulating Bible references
 - **click** (>=8.1.0): CLI framework
 - **mistune** (>=3.0.0): Markdown parsing
+- **pyyaml** (>=6.0.3): Metadata, config, and frontmatter
 - **Python** (>=3.10): Minimum version required
 - **SQLite**: Built into Python, used for all indexing
 
 ## Design Principles
 
-1. **Per-document databases**: Each source document gets its own SQLite file for portability and easy regeneration
+1. **Portable databases**: Each index is a single SQLite file, built from one document or a collection of them, and regenerated from source rather than migrated
 2. **Markdown preservation**: Store and search Markdown as-is to preserve formatting; string search uses FTS5 word-boundary matching with `<mark>` highlight tags in results
 3. **Versification scheme awareness**: Each database stores its scheme; all references are scheme-specific
 4. **Document order preservation**: Results maintain original document order via sequential IDs
@@ -188,7 +197,7 @@ When writing or editing Markdown documents (docs, README, etc.):
 ## Important Files
 
 - `src/versiref/search/docs/`: User-facing documentation, bundled into the package as package data (tracked in git; exposed via the `docs` CLI subcommand)
-- `reference/design.md`: Comprehensive design document with full schema, workflows, and implementation phases
+- `reference/design.md`: Original design document (not tracked in git; may lag the code)
 - `uv run versiref docs`: Documentation for the `versiref` dependency
 - `pyproject.toml`: Package configuration and dependencies
 - `src/versiref/search/__init__.py`: Main package entry point and public API exports
