@@ -316,6 +316,11 @@ Milestones are markers embedded in the source Markdown as HTML comments.
 They are **stripped from the stored text** at indexing time and recorded in a separate index, so they never interfere with phrase matching or reference scanning.
 Page and marg markers are put back into the text of results and `show` output, at the character position they were stripped from, so a break falling mid-block stays visible (see [searching.md](searching.md)).
 Three milestone types are recognized; any other HTML comment is left in the text untouched.
+The type may be written in any letter case (`<!-- Page: 204 -->`).
+
+A comment whose type is a near miss for one of the three, such as `<!-- pgae: 204 -->` or `<!-- pages: 204 -->`, is still left in the text, but indexing warns about it, because a misspelled marker records nothing and every result after it would report the wrong page.
+The warning quotes the comment so you can find it in the source; a type repeated through a document is reported once, with a count.
+Unrelated comments such as `<!-- TODO: check this -->` draw no warning.
 
 ### Page Milestones
 

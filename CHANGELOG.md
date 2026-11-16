@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The unrecognized-abbreviation check made when indexing now sees abbreviations written with a trailing period (`Foo. 3:4`) and references with Roman-numeral chapters, as `analyze` already did. Both went unreported before, so expect new warnings when re-indexing a source that has them.
 - In a database built from several files, each file is now a document of its own: a file with no page numbers, marginal numbers, or headings no longer reports those of the file indexed before it, and a page or section retrieved with `show` stops at the end of its file. Databases built from several files should be re-indexed; existing ones are read as before.
 - `show --page` and `show --marg` no longer silently return the first match when the value is recorded more than once, as when each document of a collection restarts its page numbers. They list the places with their block IDs and file names, and `--start` chooses one.
+- A milestone comment with a misspelled type, such as `<!-- pgae: 204 -->`, is now reported when indexing. It was indexed as ordinary text with no warning, so the page break silently went unrecorded and later results reported the page before it. The comment is still left in the text; unrelated comments such as `<!-- TODO: … -->` draw no warning.
+- Milestone types are recognized in any letter case. `<!-- Page: 204 -->` was silently treated as an ordinary comment.
 
 ## 0.10.1 - 2026-08-16
 

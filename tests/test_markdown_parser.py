@@ -1,5 +1,9 @@
 """Tests for the Markdown parser."""
 
+import logging
+
+import pytest
+
 from versiref.search.markdown_parser import (
     _extract_block,
     extract_milestones,
@@ -393,3 +397,46 @@ def test_ordered_list_keeps_its_starting_number():
 def test_ordered_list_counts_up_from_its_start():
     blocks = parse_markdown("7. Seven\n8. Eight\n")
     assert blocks[0].text == "7. Seven\n8. Eight"
+
+
+# --- Misspelled and oddly-cased milestone types ---
+
+
+def test_milestone_type_is_case_insensitive():
+    blocks = parse_markdown("<!-- Page: 204 -->\nText <!-- MARG: 7 --> more.\n")
+    assert blocks[0].text == "Text more."
+    assert [(m.type, m.value) for m in blocks[0].milestones] == [
+        ("page", "204"),
+        ("marg", "7"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("written", "intended"),
+    [("pgae", "page"), ("pages", "page"), ("pag", "page"), ("margin", "marg")],
+)
+def test_misspelled_milestone_is_kept_and_reported(written, intended, caplog):
+    source = f"<!-- {written}: 204 -->\n\nText.\n"
+    with caplog.at_level(logging.WARNING, logger="versiref.search.markdown_parser"):
+        blocks = parse_markdown(source)
+    assert f"<!-- {written}: 204 -->" in blocks[0].text
+    assert all(not b.milestones for b in blocks)
+    assert f'misspelled "{intended}" milestone' in caplog.text
+    assert f"<!-- {written}: 204 -->" in caplog.text
+
+
+@pytest.mark.parametrize("written", ["TODO", "note", "date", "image", "source"])
+def test_unrelated_typed_comment_draws_no_warning(written, caplog):
+    with caplog.at_level(logging.WARNING, logger="versiref.search.markdown_parser"):
+        blocks = parse_markdown(f"Text <!-- {written}: something --> more.\n")
+    assert f"<!-- {written}: something -->" in blocks[0].text
+    assert caplog.text == ""
+
+
+def test_repeated_misspelling_is_reported_once_with_a_count(caplog):
+    source = "<!-- pgae: 1 -->\n\nOne.\n\n<!-- pgae: 2 -->\n\nTwo.\n"
+    with caplog.at_level(logging.WARNING, logger="versiref.search.markdown_parser"):
+        parse_markdown(source)
+    assert caplog.text.count("misspelled") == 1
+    assert "<!-- pgae: 1 -->" in caplog.text
+    assert "(2 like it)" in caplog.text

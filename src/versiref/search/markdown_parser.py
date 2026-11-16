@@ -1,5 +1,6 @@
 """Markdown parsing for versiref-search."""
 
+import difflib
 import logging
 import re
 from typing import Any
@@ -10,9 +11,22 @@ from .models import BlockInfo, RawMilestone
 logger = logging.getLogger(__name__)
 
 # Milestone markers: HTML comments of the form <!-- page: 204 -->,
-# <!-- scope: John 7:53-8:11 -->, or <!-- marg: 667 -->. Other HTML comments
-# are left untouched.
-MILESTONE_RE = re.compile(r"<!--\s*(page|scope|marg)\s*:\s*(.*?)\s*-->")
+# <!-- scope: John 7:53-8:11 -->, or <!-- marg: 667 -->. The type may be in
+# any letter case. Other HTML comments are left untouched.
+MILESTONE_TYPES = ("page", "scope", "marg")
+MILESTONE_RE = re.compile(
+    rf"<!--\s*({'|'.join(MILESTONE_TYPES)})\s*:\s*(.*?)\s*-->", re.IGNORECASE
+)
+
+# Any comment with the "type: value" shape of a milestone. Most are nothing of
+# the kind (<!-- TODO: ... -->, <!-- note: ... -->); see find_misspelled_milestones.
+_TYPED_COMMENT_RE = re.compile(r"<!--\s*([A-Za-z]+)\s*:.*?-->")
+
+# How closely a comment's type must resemble a milestone type to be reported
+# as a likely misspelling: close enough to catch a transposition ("pgae"), a
+# dropped letter ("pag"), or a plural ("pages"), but not an unrelated word
+# that shares a couple of letters ("date", "note", "image").
+_MISSPELLING_CUTOFF = 0.7
 
 # YAML frontmatter: a "---" fence on the very first line, closed by a line of
 # "---" or "...". Markdown itself has no notion of frontmatter, so left in
@@ -84,6 +98,31 @@ BLOCK_TOKEN_TYPES = frozenset(
 EMPTY_TOKEN_TYPES = frozenset({"blank_line", "linebreak", "softbreak"})
 
 
+def find_misspelled_milestones(text: str) -> list[tuple[str, str]]:
+    """Find comments that look like milestones with a misspelled type.
+
+    A comment such as ``<!-- pgae: 204 -->`` is not a milestone, so it stays
+    in the text and records nothing, which is almost never what its author
+    meant. Only types resembling a real one are reported: an unrelated
+    ``<!-- TODO: ... -->`` or ``<!-- note: ... -->`` is left alone.
+
+    Args:
+        text: Block text from which recognized milestones have been stripped
+
+    Returns:
+        List of (comment, intended type) pairs, in order of appearance
+
+    """
+    suspects: list[tuple[str, str]] = []
+    for match in _TYPED_COMMENT_RE.finditer(text):
+        close = difflib.get_close_matches(
+            match.group(1).lower(), MILESTONE_TYPES, n=1, cutoff=_MISSPELLING_CUTOFF
+        )
+        if close:
+            suspects.append((match.group(0), close[0]))
+    return suspects
+
+
 def extract_milestones(text: str) -> tuple[str, list[RawMilestone]]:
     """Extract milestone comments from block text and strip them.
 
@@ -120,7 +159,9 @@ def extract_milestones(text: str) -> tuple[str, list[RawMilestone]]:
         parts.append(before)
         out_len += len(before)
         milestones.append(
-            RawMilestone(type=match.group(1), value=match.group(2), offset=out_len)
+            RawMilestone(
+                type=match.group(1).lower(), value=match.group(2), offset=out_len
+            )
         )
     parts.append(text[pos:])
     return "".join(parts), milestones
@@ -175,7 +216,8 @@ def parse_markdown(
 
     Milestone comments (``<!-- page: ... -->``, ``<!-- scope: ... -->``,
     ``<!-- marg: ... -->``) are stripped from block text and attached to the block as
-    :class:`RawMilestone` entries. A block consisting only of milestone
+    :class:`RawMilestone` entries. A comment whose type looks like a
+    misspelling of one of these is left in the text and reported as a warning. A block consisting only of milestone
     comments is dropped; its milestones attach to the next block at offset 0
     (or to the end of the last block if nothing follows).
 
@@ -202,6 +244,9 @@ def parse_markdown(
     blocks = []
     block_id = 0  # We use 0-based IDs here; database will assign real IDs
     pending: list[RawMilestone] = []  # milestones awaiting their host block
+    # Comments that look like misspelled milestones, keyed by the type as
+    # written: (first such comment, intended type, number seen).
+    misspelled: dict[str, tuple[str, str, int]] = {}
 
     # Walk the AST and extract block-level elements
     for token in tokens:
@@ -209,6 +254,10 @@ def parse_markdown(
         if not block_text:
             continue
         stripped, milestones = extract_milestones(block_text)
+        for comment, intended in find_misspelled_milestones(stripped):
+            written = comment[4:].split(":", 1)[0].strip()
+            first, _, seen = misspelled.get(written, (comment, intended, 0))
+            misspelled[written] = (first, intended, seen + 1)
         if not stripped.strip():
             # Block was only milestone comments; attach them to the next block.
             pending.extend(
@@ -235,6 +284,15 @@ def parse_markdown(
         last.milestones.extend(
             RawMilestone(type=m.type, value=m.value, offset=len(last.text))
             for m in pending
+        )
+
+    for first, intended, seen in misspelled.values():
+        logger.warning(
+            'Comment "%s" looks like a misspelled "%s" milestone%s; '
+            "it is indexed as text and records no milestone.",
+            first.strip(),
+            intended,
+            f" ({seen} like it)" if seen > 1 else "",
         )
 
     if frontmatter_title_level is not None:
