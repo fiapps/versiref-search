@@ -6,6 +6,7 @@ from versiref.search.indexer import (
     InvalidRefAction,
     find_unrecognized_abbreviations,
     index_document,
+    index_documents,
     get_index_stats,
 )
 from versiref.search.models import (
@@ -54,6 +55,7 @@ __all__ = [
     "get_section_by_heading",
     "get_toc",
     "index_document",
+    "index_documents",
     "search_commentary",
     "search_database",
 ]

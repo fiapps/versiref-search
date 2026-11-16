@@ -162,7 +162,9 @@ class Database:
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Context manager exit."""
+        """Context manager exit: keep the writes made, unless an error ended it."""
+        if self.conn and exc_type is not None:
+            self.conn.rollback()
         self.close()
 
     def connect(self) -> None:
@@ -172,9 +174,20 @@ class Database:
         # Enable foreign key constraints
         self.conn.execute("PRAGMA foreign_keys = ON")
 
+    def commit(self) -> None:
+        """Commit the writes made so far.
+
+        Writes are not committed one by one — doing so makes indexing several
+        times slower — but together, here or when the connection closes.
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        self.conn.commit()
+
     def close(self) -> None:
-        """Close database connection."""
+        """Commit any pending writes and close the database connection."""
         if self.conn:
+            self.conn.commit()
             self.conn.close()
             self.conn = None
 
@@ -200,7 +213,6 @@ class Database:
         self.conn.execute(
             "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", (key, value)
         )
-        self.conn.commit()
 
     def get_metadata(self, key: str) -> str | None:
         """Get a metadata value by key.
@@ -297,7 +309,6 @@ class Database:
             "INSERT INTO content (block_text, heading_level) VALUES (?, ?)",
             (block_text, heading_level),
         )
-        self.conn.commit()
         assert cursor.lastrowid is not None
         return cursor.lastrowid
 
@@ -331,7 +342,6 @@ class Database:
                VALUES (?, ?, ?, ?, ?)""",
             (content_id, verse_start, verse_end, char_start, char_end),
         )
-        self.conn.commit()
         assert cursor.lastrowid is not None
         return cursor.lastrowid
 
@@ -372,7 +382,6 @@ class Database:
                VALUES (?, ?, ?, ?)""",
             (type, value, content_id, char_offset),
         )
-        self.conn.commit()
         assert cursor.lastrowid is not None
         return cursor.lastrowid
 
@@ -713,7 +722,6 @@ class Database:
                VALUES (?, ?, ?, ?)""",
             (block_start, block_end, verse_start, verse_end),
         )
-        self.conn.commit()
         assert cursor.lastrowid is not None
         return cursor.lastrowid
 

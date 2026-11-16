@@ -9,7 +9,7 @@ import yaml
 from versiref import RefStyle, Sensitivity
 
 from .analyzer import analyze_abbreviations, analyze_documents
-from .indexer import index_document, get_index_stats
+from .indexer import index_documents, get_index_stats
 from .models import AbbreviationAnalysis, VersificationScore
 from .searcher import (
     AmbiguousMilestoneError,
@@ -204,23 +204,20 @@ def index(
             )
 
         # Rebuild from scratch: an existing database at the output path is
-        # replaced, not added to. The first file replaces it; later files in
-        # the same invocation accumulate into this fresh database.
-        for position, input_file in enumerate(input_files):
-            click.echo(f"Indexing {input_file}...")
-            index_document(
-                input_path=input_file,
-                output_path=output_file,
-                metadata=metadata,
-                ref_style=ref_style,
-                parser_sensitivity=parser_sensitivity,
-                invalid_references=invalid_references,
-                check_abbreviations=not skip_abbreviations_check,
-                abbreviation_whitelist=whitelist_list,
-                append=position > 0,
-                commentary_headings=commentary_headings,
-                frontmatter_title_level=frontmatter_title_level,
-            )
+        # replaced, not added to, and only once every file has been indexed.
+        index_documents(
+            input_paths=input_files,
+            output_path=output_file,
+            metadata=metadata,
+            ref_style=ref_style,
+            parser_sensitivity=parser_sensitivity,
+            invalid_references=invalid_references,
+            check_abbreviations=not skip_abbreviations_check,
+            abbreviation_whitelist=whitelist_list,
+            commentary_headings=commentary_headings,
+            frontmatter_title_level=frontmatter_title_level,
+            on_document=lambda path: click.echo(f"Indexing {path}..."),
+        )
 
         # Get and display stats
         stats = get_index_stats(output_file)

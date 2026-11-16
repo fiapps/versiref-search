@@ -7,6 +7,7 @@ from pathlib import Path
 from versiref import RefStyle, standard_names
 from versiref.search import (
     index_document,
+    index_documents,
     get_index_stats,
     find_unrecognized_abbreviations,
 )
@@ -802,3 +803,71 @@ def test_reserved_metadata_keys_are_not_stored(tmp_path, minimal_md, ref_style, 
     assert metadata["format"] == "versiref-search"
     assert metadata["schema_version"] == SCHEMA_VERSION
     assert metadata["versification_scheme"] == "eng"
+
+
+# --- Failed indexing leaves the database as it was ---
+
+
+def _block_count(db_path: Path) -> int:
+    return get_index_stats(db_path)["block_count"]
+
+
+def test_failed_rebuild_keeps_the_existing_database(tmp_path, minimal_md, ref_style):
+    db_path = tmp_path / "kept.db"
+    metadata = {"title": "T", "versification": "eng"}
+    index_document(minimal_md, db_path, metadata, ref_style)
+    before = _block_count(db_path)
+
+    with pytest.raises(ValueError):
+        index_document(
+            minimal_md, db_path, {"title": "T", "versification": "nonesuch"}, ref_style
+        )
+    assert _block_count(db_path) == before
+    assert [p.name for p in tmp_path.iterdir() if p.suffix == ".tmp"] == []
+
+
+def test_failed_multi_file_rebuild_leaves_no_partial_database(
+    tmp_path, minimal_md, ref_style
+):
+    db_path = tmp_path / "multi.db"
+    metadata = {"title": "T", "versification": "eng"}
+    with pytest.raises(FileNotFoundError):
+        index_documents(
+            [minimal_md, tmp_path / "missing.md"], db_path, metadata, ref_style
+        )
+    assert not db_path.exists()
+    assert [p.name for p in tmp_path.iterdir() if p.suffix == ".tmp"] == []
+
+
+def test_index_documents_reports_each_document(tmp_path, minimal_md, ref_style):
+    db_path = tmp_path / "two.db"
+    seen: list[Path] = []
+    index_documents(
+        [minimal_md, minimal_md],
+        db_path,
+        {"title": "T", "versification": "eng"},
+        ref_style,
+        on_document=seen.append,
+    )
+    assert seen == [minimal_md, minimal_md]
+    single = tmp_path / "one.db"
+    index_document(
+        minimal_md, single, {"title": "T", "versification": "eng"}, ref_style
+    )
+    assert _block_count(db_path) == 2 * _block_count(single)
+
+
+def test_failed_append_rolls_back(tmp_path, minimal_md, ref_style, monkeypatch):
+    db_path = tmp_path / "appended.db"
+    metadata = {"title": "T", "versification": "eng"}
+    index_document(minimal_md, db_path, metadata, ref_style)
+    before = _block_count(db_path)
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(Database, "insert_reference", fail)
+    with pytest.raises(RuntimeError):
+        index_document(minimal_md, db_path, metadata, ref_style, append=True)
+    monkeypatch.undo()
+    assert _block_count(db_path) == before

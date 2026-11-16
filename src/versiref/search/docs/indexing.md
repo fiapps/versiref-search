@@ -423,7 +423,7 @@ CLI options take precedence over config file values where both apply.
 
 The `versiref.search` package exports the following functions and types for programmatic use:
 
-- `index_document` and `get_index_stats` — build and inspect databases.
+- `index_documents`, `index_document`, and `get_index_stats` — build and inspect databases. `index_documents` builds one database from several files, as the `index` command does.
 - `analyze_documents` — rank named versifications against a set of source files; returns `list[VersificationScore]`.
 - `analyze_abbreviations` — find unrecognized book abbreviations and recommend bundled standard-name sets to cover them; returns an `AbbreviationAnalysis`.
 

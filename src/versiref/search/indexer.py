@@ -1,7 +1,9 @@
 """Indexing module for versiref-search."""
 
 import logging
+import os
 import re
+from collections.abc import Callable, Sequence
 from typing import Literal
 from pathlib import Path
 from versiref import Versification, RefParser, RefStyle, Sensitivity
@@ -166,6 +168,7 @@ def index_document(
             replaced so the result reflects only this document. If True, the
             document's blocks and references are added to the existing
             database (used to combine several documents into one index).
+            Either way the database is left as it was if indexing fails.
         commentary_headings: If True, headings containing Bible references
             open commentary scopes: the referenced passage is recorded as the
             subject of the section the heading opens (through the next
@@ -181,6 +184,23 @@ def index_document(
         ValueError: If versification is invalid or required keys missing
 
     """
+    if not append:
+        # A rebuild goes through index_documents, which builds the database
+        # aside and swaps it in only once it is complete.
+        index_documents(
+            [input_path],
+            output_path,
+            metadata,
+            ref_style,
+            parser_sensitivity=parser_sensitivity,
+            invalid_references=invalid_references,
+            check_abbreviations=check_abbreviations,
+            abbreviation_whitelist=abbreviation_whitelist,
+            commentary_headings=commentary_headings,
+            frontmatter_title_level=frontmatter_title_level,
+        )
+        return
+
     input_path = Path(input_path)
     output_path = Path(output_path)
 
@@ -221,13 +241,6 @@ def index_document(
         frontmatter=frontmatter,
         frontmatter_title_level=frontmatter_title_level,
     )
-
-    # Replace any existing database unless appending, so a rebuild reflects
-    # only the current source rather than accumulating duplicate blocks.
-    # Done after all validation/parsing so a failed call leaves the old
-    # database untouched.
-    if not append and output_path.exists():
-        output_path.unlink()
 
     # Create database and populate it
     with Database(output_path) as db:
@@ -397,6 +410,79 @@ def index_document(
                 "the configured style may not match the document's citation format.",
                 input_path.name,
             )
+
+
+def index_documents(
+    input_paths: Sequence[str | Path],
+    output_path: str | Path,
+    metadata: dict[str, object],
+    ref_style: RefStyle,
+    *,
+    parser_sensitivity: Sensitivity = Sensitivity.VERSE,
+    invalid_references: InvalidRefAction = "warn",
+    check_abbreviations: bool = True,
+    abbreviation_whitelist: list[str] | None = None,
+    commentary_headings: bool = False,
+    frontmatter_title_level: int | None = 1,
+    on_document: Callable[[Path], None] | None = None,
+) -> None:
+    """Index one or more Markdown documents into a new SQLite database.
+
+    The documents are indexed in order into one database, each as a document
+    of its own. Any existing database at ``output_path`` is replaced, but only
+    once the new one is complete: if indexing fails partway, the existing
+    database is left untouched and no partial one is left behind.
+
+    Args:
+        input_paths: Paths to the input Markdown files, in order
+        output_path: Path to output SQLite database file
+        metadata: Document metadata dict (see :func:`index_document`)
+        ref_style: RefStyle to use for parsing Bible references
+        parser_sensitivity: Sensitivity level for reference scanning
+        invalid_references: How to handle invalid references
+        check_abbreviations: If True, warn about unrecognized abbreviations
+        abbreviation_whitelist: Abbreviations to exclude from the check
+        commentary_headings: If True, headings containing Bible references
+            open commentary scopes
+        frontmatter_title_level: Heading level for a frontmatter ``title``,
+            or None to index no such heading
+        on_document: Called with each input path just before it is indexed,
+            e.g. to report progress
+
+    Raises:
+        FileNotFoundError: If an input file doesn't exist
+        ValueError: If no input is given, the versification is invalid, or
+            required metadata keys are missing
+
+    """
+    if not input_paths:
+        raise ValueError("At least one input file is required")
+
+    output_path = Path(output_path)
+    # Built beside the destination so the final rename stays on one filesystem.
+    building = output_path.with_name(f".{output_path.name}.{os.getpid()}.tmp")
+    building.unlink(missing_ok=True)
+    try:
+        for raw_path in input_paths:
+            input_path = Path(raw_path)
+            if on_document is not None:
+                on_document(input_path)
+            index_document(
+                input_path,
+                building,
+                metadata,
+                ref_style,
+                parser_sensitivity=parser_sensitivity,
+                invalid_references=invalid_references,
+                check_abbreviations=check_abbreviations,
+                abbreviation_whitelist=abbreviation_whitelist,
+                append=True,
+                commentary_headings=commentary_headings,
+                frontmatter_title_level=frontmatter_title_level,
+            )
+        os.replace(building, output_path)
+    finally:
+        building.unlink(missing_ok=True)
 
 
 def get_index_stats(db_path: str | Path) -> dict:
