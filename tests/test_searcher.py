@@ -915,3 +915,66 @@ def test_milestone_sort_key_sub_ordinal_with_volume_prefix():
         < _milestone_sort_key("2:84a")
         < _milestone_sort_key("2:85")
     )
+
+
+# --- Phrase search ---
+
+
+@pytest.fixture
+def punctuated_db(tmp_path, ref_style):
+    """Database whose text holds punctuation that FTS5 reads as query syntax."""
+    md_path = tmp_path / "punct.md"
+    md_path.write_text(
+        "She is the God-bearer. Don't stop.\n\n"
+        'The mother NOT virgin phrase, said "so" plainly.\n\n'
+        "A mother alone.\n",
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "punct.db"
+    index_document(
+        input_path=md_path,
+        output_path=db_path,
+        metadata={"title": "T", "versification": "eng"},
+        ref_style=ref_style,
+        check_abbreviations=False,
+    )
+    return db_path
+
+
+@pytest.mark.parametrize("phrase", ["God-bearer", "Don't", "Don't stop."])
+def test_phrase_search_matches_punctuated_text(punctuated_db, ref_style, phrase):
+    results = search_database(punctuated_db, ref_style, phrase_query=phrase)
+    assert [r.block_id for r in results] == [1]
+    assert "<mark>" in results[0].block_text
+
+
+def test_phrase_search_reads_operators_as_words(punctuated_db, ref_style):
+    as_phrase = search_database(
+        punctuated_db, ref_style, phrase_query="mother NOT virgin"
+    )
+    assert [r.block_id for r in as_phrase] == [2]
+    as_expression = search_database(
+        punctuated_db, ref_style, string_query="mother NOT virgin"
+    )
+    assert [r.block_id for r in as_expression] == [3]
+
+
+def test_phrase_search_with_double_quotes(punctuated_db, ref_style):
+    results = search_database(punctuated_db, ref_style, phrase_query='said "so"')
+    assert [r.block_id for r in results] == [2]
+
+
+def test_phrase_search_without_words_finds_nothing(punctuated_db, ref_style):
+    assert search_database(punctuated_db, ref_style, phrase_query="--") == []
+
+
+def test_phrase_and_string_cannot_be_combined(punctuated_db, ref_style):
+    with pytest.raises(ValueError, match="cannot be combined"):
+        search_database(
+            punctuated_db, ref_style, string_query="mother", phrase_query="mother"
+        )
+
+
+def test_invalid_string_expression_points_to_phrase(punctuated_db, ref_style):
+    with pytest.raises(ValueError, match="phrase"):
+        search_database(punctuated_db, ref_style, string_query="God-bearer")

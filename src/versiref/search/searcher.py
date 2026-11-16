@@ -1,6 +1,7 @@
 """Search module for versiref-search."""
 
 import re
+import sqlite3
 from pathlib import Path
 from typing import Any
 from versiref import Versification, RefParser, RefStyle
@@ -66,6 +67,15 @@ def _wrap_reference_spans(text: str, spans: set[tuple[int, int]]) -> str:
     for start, end in reversed(merged):
         text = text[:start] + "<mark>" + text[start:end] + "</mark>" + text[end:]
     return text
+
+
+def _fts_phrase(text: str) -> str:
+    """Quote text as an FTS5 phrase, so none of it is read as query syntax.
+
+    The phrase matches the words of ``text`` in sequence; punctuation between
+    them is ignored, as it is when the text is indexed.
+    """
+    return '"' + text.replace('"', '""') + '"'
 
 
 def _span_end(
@@ -150,6 +160,7 @@ def search_database(
     query_versification: str | None = None,
     start_id: int | None = None,
     end_id: int | None = None,
+    phrase_query: str | None = None,
 ) -> list[SearchResult]:
     """Search a database for Bible references and/or text strings.
 
@@ -157,7 +168,10 @@ def search_database(
         db_path: Path to SQLite database file
         ref_style: RefStyle for parsing reference queries
         reference_query: Bible reference to search for (e.g., "Romans 3", "Isaiah 7:14")
-        string_query: Text string to search for (FTS5 word-boundary matching)
+        string_query: SQLite FTS5 search expression (word-boundary matching).
+            A single plain word is an expression that matches itself, but
+            punctuation and the words AND, OR, NOT, and NEAR are query syntax;
+            use ``phrase_query`` for text to be matched as written.
         include_headings: Whether to include heading context in results
         query_versification: Versification scheme of the query reference. When
             provided and different from the database's scheme, the parsed
@@ -167,6 +181,9 @@ def search_database(
             range of blocks that will be searched.
         end_id: Optional maximum content block ID (inclusive). Limits the
             range of blocks that will be searched.
+        phrase_query: Literal text to search for: matches its words in
+            sequence, with nothing read as FTS5 query syntax. Cannot be
+            combined with ``string_query``.
 
     Returns:
         List of SearchResult objects in document order
@@ -175,15 +192,20 @@ def search_database(
         FileNotFoundError: If database doesn't exist
         IncompatibleDatabaseError: If the database is not a compatible
             versiref-search index
-        ValueError: If neither reference_query nor string_query is provided,
-            or if reference_query is invalid, or if versification mapping fails,
-            or if start_id > end_id
+        ValueError: If none of reference_query, string_query, and
+            phrase_query is provided, or if both string_query and phrase_query
+            are, or if reference_query is invalid, or if versification mapping
+            fails, or if string_query is not a valid FTS5 expression, or if
+            start_id > end_id
 
     """
-    if reference_query is None and string_query is None:
+    if reference_query is None and string_query is None and phrase_query is None:
         raise ValueError(
-            "At least one of reference_query or string_query must be provided"
+            "At least one of reference_query, string_query, or phrase_query "
+            "must be provided"
         )
+    if string_query is not None and phrase_query is not None:
+        raise ValueError("string_query and phrase_query cannot be combined")
 
     if start_id is not None and end_id is not None and start_id > end_id:
         raise ValueError(f"start_id ({start_id}) must not exceed end_id ({end_id})")
@@ -229,10 +251,21 @@ def search_database(
                 ref_blocks[content_id] = _wrap_reference_spans(block_text, spans)
 
         # Search by string if provided
-        if string_query:
-            string_results = db.search_by_string(
-                string_query, block_start=start_id, block_end=end_id
-            )
+        if string_query or phrase_query:
+            try:
+                string_results = db.search_by_string(
+                    string_query if string_query else _fts_phrase(phrase_query or ""),
+                    block_start=start_id,
+                    block_end=end_id,
+                )
+            except sqlite3.OperationalError as e:
+                if not string_query:
+                    raise
+                raise ValueError(
+                    f"'{string_query}' is not a valid FTS5 search expression "
+                    f"({e}); to search for the text as written, use a phrase "
+                    "search (--phrase) instead"
+                )
             for content_id, highlighted_text in string_results:
                 if content_id not in string_blocks:
                     string_blocks[content_id] = highlighted_text

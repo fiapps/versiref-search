@@ -713,3 +713,28 @@ def test_info_omits_zero_counts(tmp_path):
     assert result.exit_code == 0
     assert "milestones" not in result.output
     assert "commentary scopes" not in result.output
+
+
+def test_search_phrase_matches_punctuated_text(tmp_path):
+    db = _make_db(tmp_path, "doc_p", "She is the God-bearer.\n", "Document P")
+    runner = CliRunner()
+    result = runner.invoke(main, ["search", str(db), "-p", "God-bearer"])
+    assert result.exit_code == 0
+    assert "1 result" in result.output
+
+
+def test_search_invalid_string_expression_suggests_phrase(tmp_path):
+    db = _make_db(tmp_path, "doc_p", "She is the God-bearer.\n", "Document P")
+    runner = CliRunner()
+    result = runner.invoke(main, ["search", str(db), "-s", "God-bearer"])
+    assert result.exit_code != 0
+    assert "--phrase" in result.output
+    assert "Unexpected error" not in result.output
+
+
+def test_search_string_and_phrase_cannot_be_combined(tmp_path):
+    db = _make_db(tmp_path, "doc_p", "She is the God-bearer.\n", "Document P")
+    runner = CliRunner()
+    result = runner.invoke(main, ["search", str(db), "-s", "God", "-p", "bearer"])
+    assert result.exit_code != 0
+    assert "cannot be combined" in result.output

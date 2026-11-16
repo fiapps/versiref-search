@@ -11,13 +11,19 @@ Search a database for a Bible reference:
 versiref-search search mybook.db -r "Romans 3:23"
 ```
 
-Search for a text string (or any SQLite FTS5 search expression):
+Search for a word (or any SQLite FTS5 search expression):
 
 ```sh
 versiref-search search mybook.db -s "justification"
 ```
 
-Combine both (results match either criterion):
+Search for text exactly as written:
+
+```sh
+versiref-search search mybook.db -p "God-bearer"
+```
+
+Combine a reference with a string or phrase (results match either criterion):
 
 ```sh
 versiref-search search mybook.db -r "Romans 3" -s "faith"
@@ -154,6 +160,18 @@ In XML output the section is wrapped in `<scope start="..." end="...">` instead 
 String search uses SQLite FTS5 for word-boundary matching.
 It is case-insensitive but matches whole words, not substrings.
 For example, searching for "grace" will not match "disgrace".
+
+There are two ways to give the text:
+
+- `-s`/`--string` takes an FTS5 search expression.
+  A single plain word matches itself, and words can be combined: `faith AND works`, `mother NOT virgin`, `grac*`.
+  Punctuation is query syntax here, so text such as `God-bearer`, `Don't`, or `Isa 7:14` is not a valid expression and is refused with an error.
+- `-p`/`--phrase` takes literal text.
+  It matches the words in sequence and reads nothing as query syntax, so `-p "God-bearer"`, `-p "Isa 7:14"`, and `-p "mother NOT virgin"` each find just those words.
+  Punctuation and spacing between the words are not compared: `-p "God-bearer"` also finds "God bearer".
+
+Use `--phrase` whenever the text comes from somewhere else, such as a quotation to be located.
+The two options cannot be combined with each other.
 
 ## Limiting the Search Range
 
@@ -303,7 +321,8 @@ Databases with milestones or commentary scopes also report those counts.
 | Option | Description |
 | ------ | ----------- |
 | `-r`, `--reference` | Bible reference to search for |
-| `-s`, `--string` | Text string to search for (FTS5 word-boundary, case-insensitive) |
+| `-s`, `--string` | FTS5 search expression to search for (word-boundary, case-insensitive) |
+| `-p`, `--phrase` | Literal text to search for, matched as its words in sequence (cannot be combined with `-s`) |
 | `-C`, `--commentary` | Find commentary on the passage (requires `-r`) |
 | `--style` | Reference style for query parsing (default: `en-cmos_short`) |
 | `-v`, `--versification` | Versification scheme of the query reference (default: `eng`) |

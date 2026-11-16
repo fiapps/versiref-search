@@ -306,7 +306,18 @@ def _output_search_xml(
     "--reference",
     help='Bible reference to search for (e.g., "Lk 1:28", "Ps 45:10")',
 )
-@click.option("-s", "--string", help="Text string to search for (case-insensitive)")
+@click.option(
+    "-s",
+    "--string",
+    help="FTS5 search expression: a word, or words combined with AND, OR, "
+    "NOT, *, etc. (case-insensitive)",
+)
+@click.option(
+    "-p",
+    "--phrase",
+    help="Literal text to search for: its words in sequence, punctuation "
+    "and all (case-insensitive)",
+)
 @click.option(
     "-C",
     "--commentary",
@@ -354,6 +365,7 @@ def search(
     databases: tuple[Path, ...],
     reference: str | None,
     string: str | None,
+    phrase: str | None,
     commentary: bool,
     no_headings: bool,
     style: str,
@@ -365,25 +377,38 @@ def search(
 ) -> None:
     """Search one or more databases for Bible references and/or text strings.
 
-    At least one of --reference or --string must be provided.
+    At least one of --reference, --string, or --phrase must be provided.
     Results are returned in document order with heading context.
+
+    --string takes an FTS5 search expression, in which punctuation and words
+    such as AND, OR, and NOT are query syntax. --phrase takes text to be
+    matched as written, e.g. --phrase "God-bearer".
 
     With --commentary, --reference finds sections recorded as commenting on
     the passage (rather than citing it); each result names its block range
     for retrieval with the show command.
     """
-    if not reference and not string:
+    if not reference and not string and not phrase:
         click.echo(
-            "Error: At least one of --reference or --string must be provided", err=True
+            "Error: At least one of --reference, --string, or --phrase "
+            "must be provided",
+            err=True,
         )
+        sys.exit(1)
+
+    if string and phrase:
+        click.echo("Error: --string cannot be combined with --phrase", err=True)
         sys.exit(1)
 
     if commentary:
         if not reference:
             click.echo("Error: --commentary requires --reference", err=True)
             sys.exit(1)
-        if string:
-            click.echo("Error: --commentary cannot be combined with --string", err=True)
+        if string or phrase:
+            click.echo(
+                "Error: --commentary cannot be combined with --string/--phrase",
+                err=True,
+            )
             sys.exit(1)
         if start_id is not None or end_id is not None:
             click.echo(
@@ -417,6 +442,7 @@ def search(
                     ref_style=ref_style,
                     reference_query=reference,
                     string_query=string,
+                    phrase_query=phrase,
                     include_headings=not no_headings,
                     query_versification=None if native else versification,
                     start_id=start_id,

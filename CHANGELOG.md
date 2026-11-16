@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `search --phrase` (`-p`) searches for text exactly as written. `--string` reads its argument as an FTS5 search expression, so ordinary text containing punctuation, such as "God-bearer" or "Isa 7:14", was refused with an obscure error; `--phrase` finds those words in sequence. `search_database` takes a matching `phrase_query` argument.
+
 ### Changed
 
 - Requires versiref 0.13.0, whose references hold their verse ranges directly and may span books. A range such as "Matt–John" or "1 Sam 31:1–2 Sam 1:27" is indexed and searched as a single range, and a reference to a verse the versification omits, such as the NABRE's Matthew 17:21, is valid again.
+- A `--string` argument that is not a valid search expression is reported as such, with a pointer to `--phrase`, instead of as an unexpected error.
 - `analyze` scores each candidate versification by verse range instead of by each book of a reference. One verse that a versification lacks no longer counts against the other ranges cited with it, so candidates that had tied are told apart, and the totals reported are larger.
 
 ### Fixed
