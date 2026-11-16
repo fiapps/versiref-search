@@ -7,6 +7,7 @@ from pathlib import Path
 from versiref import (
     BibleRef,
     RefParser,
+    RefPoint,
     RefStyle,
     Sensitivity,
     Versification,
@@ -149,7 +150,7 @@ def analyze_documents(
     which is the same across all known schemes.
 
     Repeated citations of the same reference count once: each parsed
-    reference is canonicalized via ``ref_style`` before deduplication, so
+    reference is reduced to the verses it spans before deduplication, so
     "Lk 1:28" and "Luke 1:28" fold together. The ranking therefore
     reflects the diversity of references covered rather than how often a
     popular verse is cited.
@@ -171,14 +172,17 @@ def analyze_documents(
     versifications = {name: Versification.named(name) for name in candidates}
 
     # Any versification will do for scanning; pick the first candidate.
-    # Dedupe by the canonical formatted form, which folds together
-    # references that differ only in a trailing versification designator.
+    # Dedupe by the points each range runs between, which folds together
+    # references that differ only in how they are written or in a trailing
+    # versification designator. Formatting the reference would do the same
+    # but fails for a book the style can recognize yet has no name for.
     parser = RefParser(ref_style, next(iter(versifications.values())))
-    pool: dict[str, BibleRef] = {}
+    pool: dict[tuple[tuple[RefPoint, RefPoint], ...], BibleRef] = {}
     for raw_path in input_paths:
         text = Path(raw_path).read_text(encoding="utf-8")
         for ref, _, _ in parser.scan_string(text, sensitivity=parser_sensitivity):
-            pool.setdefault(ref.format(ref_style), ref)
+            key = tuple((r.start, r.end) for r in ref.ranges)
+            pool.setdefault(key, ref)
 
     scores: list[VersificationScore] = []
     for name in candidates:

@@ -257,3 +257,19 @@ def test_abbreviations_whitelist_does_not_affect_unrelated(tmp_path, ref_style):
     result = analyze_abbreviations([md], ref_style, abbreviation_whitelist=["PL"])
     assert "1Sa" in result.unrecognized
     assert result.needed_sets == ["en-bibleworks"]
+
+
+def test_book_recognized_only_through_also_recognize(tmp_path):
+    """A book the style can recognize but not format must not break scoring."""
+    style = RefStyle.from_dict(
+        {
+            "names": "la-vetus_abbreviationes",
+            "chapter_verse_separator": ", ",
+            "chapter_number_style": "roman",
+            "also_recognize": [{"IV Esdrae": "2ES"}],
+        }
+    )
+    path = _write(tmp_path, "t.md", "Vide Gen. IX, 1 et IV Esdrae II, 6.\n")
+    scores = analyze_documents([path], style)
+    assert scores[0].total == 2
+    assert _by_name(scores)["vulgata"].valid == 2
