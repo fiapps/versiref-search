@@ -45,6 +45,11 @@ DOCUMENT_MILESTONE = "document"
 # Milestone value ending the run of the previous value of the same type.
 MILESTONE_END = "end"
 
+# Milestone types stored in the milestone table and reported with results: a
+# value of each stays in effect from its marker until the next one. (Scope
+# markers are milestones in the source but are stored as commentary scopes.)
+VALUE_MILESTONE_TYPES = ("page", "marg", "date")
+
 
 class IncompatibleDatabaseError(Exception):
     """Raised when a database is not a compatible versiref-search index."""
@@ -402,7 +407,7 @@ class Database:
                WHERE type = ?
                  AND content_id >= ?
                  AND (content_id < ? OR (content_id = ? AND char_offset <= ?))
-               ORDER BY content_id DESC, char_offset DESC
+               ORDER BY content_id DESC, char_offset DESC, id DESC
                LIMIT 1""",
             (
                 milestone_type,
@@ -488,7 +493,10 @@ class Database:
         return row["value"] if row else None
 
     def get_milestones_in_range(
-        self, start_id: int, end_id: int, types: tuple[str, ...] = ("page", "marg")
+        self,
+        start_id: int,
+        end_id: int,
+        types: tuple[str, ...] = VALUE_MILESTONE_TYPES,
     ) -> dict[int, list[RawMilestone]]:
         """Get the milestones falling inside a range of content blocks.
 
@@ -550,7 +558,7 @@ class Database:
         cursor = self.conn.execute(
             """SELECT value FROM milestone
                WHERE type = ? AND value != ? AND content_id BETWEEN ? AND ?
-               ORDER BY content_id DESC, char_offset DESC
+               ORDER BY content_id DESC, char_offset DESC, id DESC
                LIMIT 1""",
             (milestone_type, MILESTONE_END, start_id, end_id),
         )

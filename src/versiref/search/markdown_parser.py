@@ -1,5 +1,6 @@
 """Markdown parsing for versiref-search."""
 
+import datetime
 import difflib
 import logging
 import re
@@ -11,9 +12,10 @@ from .models import BlockInfo, RawMilestone
 logger = logging.getLogger(__name__)
 
 # Milestone markers: HTML comments of the form <!-- page: 204 -->,
-# <!-- scope: John 7:53-8:11 -->, or <!-- marg: 667 -->. The type may be in
-# any letter case. Other HTML comments are left untouched.
-MILESTONE_TYPES = ("page", "scope", "marg")
+# <!-- scope: John 7:53-8:11 -->, <!-- marg: 667 -->, or
+# <!-- date: 1896-09-20 -->. The type may be in any letter case. Other HTML
+# comments are left untouched.
+MILESTONE_TYPES = ("page", "scope", "marg", "date")
 MILESTONE_RE = re.compile(
     rf"<!--\s*({'|'.join(MILESTONE_TYPES)})\s*:\s*(.*?)\s*-->", re.IGNORECASE
 )
@@ -167,6 +169,24 @@ def extract_milestones(text: str) -> tuple[str, list[RawMilestone]]:
     return "".join(parts), milestones
 
 
+def _frontmatter_date(frontmatter: dict[str, Any]) -> str | None:
+    """Take the document's date from its frontmatter, as milestone text.
+
+    YAML reads an ISO 8601 date as a date object, which is written back out
+    in ISO form; anything else is kept as written.
+    """
+    value = frontmatter.get("date")
+    if isinstance(value, datetime.datetime):
+        return value.date().isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    if isinstance(value, (str, int)) and not isinstance(value, bool):
+        return str(value).strip() or None
+    if value is not None:
+        logger.warning("Frontmatter date %r is not a date; ignoring it.", value)
+    return None
+
+
 def _normalize_heading_text(text: str) -> str:
     """Reduce heading or title text for comparison."""
     return " ".join(text.lstrip("#").split()).casefold()
@@ -210,12 +230,13 @@ def parse_markdown(
     """Parse Markdown text into block-level elements.
 
     A leading YAML frontmatter block is stripped and not indexed. When it
-    declares a ``title``, a heading carrying that title opens the document, so
+    declares a ``date``, the document's first block carries it as a date
+    milestone. When it declares a ``title``, a heading carrying that title opens the document, so
     that blocks before its first real heading still have heading context —
     unless the document already heads itself (see :func:`_title_block`).
 
     Milestone comments (``<!-- page: ... -->``, ``<!-- scope: ... -->``,
-    ``<!-- marg: ... -->``) are stripped from block text and attached to the block as
+    ``<!-- marg: ... -->``, ``<!-- date: ... -->``) are stripped from block text and attached to the block as
     :class:`RawMilestone` entries. A comment whose type looks like a
     misspelling of one of these is left in the text and reported as a warning. A block consisting only of milestone
     comments is dropped; its milestones attach to the next block at offset 0
@@ -301,6 +322,14 @@ def parse_markdown(
             blocks.insert(0, title)
             for position, block in enumerate(blocks):
                 block.id = position
+
+    # The frontmatter date dates the document from its first block on, unless
+    # the document opens with a date marker of its own.
+    date = _frontmatter_date(frontmatter)
+    if date is not None and blocks:
+        opening = blocks[0].milestones
+        if not any(m.type == "date" and m.offset == 0 for m in opening):
+            opening.insert(0, RawMilestone(type="date", value=date, offset=0))
 
     return blocks
 

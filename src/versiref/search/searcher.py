@@ -332,6 +332,7 @@ def search_database(
                     marg=marg,
                     page_end=_span_end(milestones, "page", page),
                     marg_end=_span_end(milestones, "marg", marg),
+                    date=db.get_milestone_for_block(content_id, "date"),
                 )
             )
 
@@ -444,6 +445,7 @@ def search_commentary(
                     marg=marg,
                     page_end=page_last if page_last != page else None,
                     marg_end=marg_last if marg_last != marg else None,
+                    date=db.get_milestone_for_block(block_start, "date"),
                 )
             )
 
@@ -659,6 +661,54 @@ def get_marg_context(
         db.validate_schema()
         return _get_milestone_context(
             db, "marg", marg, "marg value", include_headings, max_blocks, start_id
+        )
+
+
+def get_date_context(
+    db_path: str | Path,
+    date: str,
+    include_headings: bool = True,
+    max_blocks: int = DEFAULT_MAX_SECTION_BLOCKS,
+    start_id: int | None = None,
+) -> list[BlockInfo]:
+    """Get the content blocks of a dated document or item.
+
+    Looks up the ``date`` milestone with the given value and returns the
+    blocks from it through the block holding the next date milestone, or
+    through the end of its source document, whichever comes first. A document
+    dated by its frontmatter is returned whole.
+
+    Args:
+        db_path: Path to SQLite database file
+        date: Date to look up (exact match, e.g. "1896-09-20")
+        include_headings: Whether to include preceding headings before the span
+        max_blocks: Maximum number of blocks before refusing
+        start_id: Take the first milestone with this value at or after this
+            block. Needed only when the date is recorded in more than one
+            place, as when two documents of a collection share a date.
+
+    Returns:
+        List of BlockInfo objects in document order
+
+    Raises:
+        FileNotFoundError: If database doesn't exist
+        IncompatibleDatabaseError: If the database is not a compatible
+            versiref-search index
+        AmbiguousMilestoneError: If the date is recorded in more than one
+            place and ``start_id`` does not choose among them
+        ValueError: If the database has no date milestones or none with this
+            value (the message lists nearby recorded dates)
+        SectionTooLargeError: If the span exceeds max_blocks
+
+    """
+    db_path = Path(db_path)
+    if not db_path.exists():
+        raise FileNotFoundError(f"Database not found: {db_path}")
+
+    with Database(db_path) as db:
+        db.validate_schema()
+        return _get_milestone_context(
+            db, "date", date, "date", include_headings, max_blocks, start_id
         )
 
 

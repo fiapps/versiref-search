@@ -825,3 +825,22 @@ def test_info_names_the_only_milestone_type(tmp_path):
     result = CliRunner().invoke(main, ["info", str(db)])
     assert "page milestones:" in result.output
     assert "marg" not in result.output
+
+
+# --- Date milestones ---
+
+
+def test_show_date_and_search_report_dates(tmp_path):
+    content = "---\ndate: 1896-09-20\ntitle: Fidentem\n---\n\nCites Lk 1:28.\n"
+    db = _make_db(tmp_path, "dated", content, "Dated")
+    runner = CliRunner()
+    result = runner.invoke(main, ["search", str(db), "-r", "Lk 1:28"])
+    assert "date 1896-09-20]" in result.output
+    result = runner.invoke(main, ["show", str(db), "--date", "1896-09-20"])
+    assert result.exit_code == 0
+    assert "Cites Lk 1:28." in result.output
+    result = runner.invoke(
+        main, ["show", str(db), "--date", "1896-09-20", "--page", "1"]
+    )
+    assert result.exit_code != 0
+    assert "--page cannot be combined with --date" in result.output

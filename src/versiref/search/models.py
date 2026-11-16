@@ -51,7 +51,7 @@ class RawMilestone:
     """A milestone marker extracted from the Markdown source.
 
     Attributes:
-        type: Milestone type ("page", "scope", or "marg")
+        type: Milestone type ("page", "scope", "marg", or "date")
         value: Milestone value (e.g., "204" for a page, "John 7:53-8:11" or
             "end" for a scope, "667" or "667a" for a marginal number)
         offset: Character offset in the block's *stripped* text where the
@@ -148,6 +148,7 @@ def _milestone_annotations(
     marg: str | None,
     page_end: str | None = None,
     marg_end: str | None = None,
+    date: str | None = None,
 ) -> list[str]:
     """Build ``"key value"`` display annotations for the milestones in effect.
 
@@ -159,6 +160,8 @@ def _milestone_annotations(
         annotations.append(f"pages {page}-{page_end}" if page_end else f"page {page}")
     if marg is not None:
         annotations.append(f"marg {marg}-{marg_end}" if marg_end else f"marg {marg}")
+    if date is not None:
+        annotations.append(f"date {date}")
     return annotations
 
 
@@ -167,6 +170,7 @@ def _milestone_xml_attrs(
     marg: str | None,
     page_end: str | None = None,
     marg_end: str | None = None,
+    date: str | None = None,
 ) -> str:
     """Build XML attributes for the milestones in effect (e.g. ``page="204"``)."""
     attrs = ""
@@ -178,6 +182,8 @@ def _milestone_xml_attrs(
         attrs += f' marg="{marg}"'
         if marg_end:
             attrs += f' marg_end="{marg_end}"'
+    if date is not None:
+        attrs += f' date="{date}"'
     return attrs
 
 
@@ -199,6 +205,8 @@ class SearchResult:
             changes partway through it; None otherwise
         marg_end: Last marginal number recorded inside the block, when it
             changes partway through it; None otherwise
+        date: Date in effect at the start of the block — that of the document
+            or dated item it belongs to — or None if none is recorded
 
     """
 
@@ -209,6 +217,7 @@ class SearchResult:
     marg: str | None = None
     page_end: str | None = None
     marg_end: str | None = None
+    date: str | None = None
 
     def format_for_display(self, show_headings: bool = True) -> str:
         """Format the search result for terminal display.
@@ -235,7 +244,7 @@ class SearchResult:
 
         # Add the content block with ID (and page/marg, if known)
         annotations = _milestone_annotations(
-            self.page, self.marg, self.page_end, self.marg_end
+            self.page, self.marg, self.page_end, self.marg_end, self.date
         )
         suffix = f", {', '.join(annotations)}" if annotations else ""
         lines.append(f"[Block {self.block_id}{suffix}]")
@@ -263,7 +272,9 @@ class SearchResult:
                 lines.append(heading.text.strip())
                 lines.append("</block>")
 
-        attrs = _milestone_xml_attrs(self.page, self.marg, self.page_end, self.marg_end)
+        attrs = _milestone_xml_attrs(
+            self.page, self.marg, self.page_end, self.marg_end, self.date
+        )
         lines.append(f'<block n="{self.block_id}"{attrs}>')
         lines.append(self.block_text)
         lines.append("</block>")
@@ -291,6 +302,7 @@ class ScopeResult:
             changes over its course; None otherwise
         marg_end: Last marginal number recorded inside the span, when it
             changes over its course; None otherwise
+        date: Date in effect at the span's start, or None
 
     """
 
@@ -302,6 +314,7 @@ class ScopeResult:
     marg: str | None = None
     page_end: str | None = None
     marg_end: str | None = None
+    date: str | None = None
 
     def format_for_display(self, show_headings: bool = True) -> str:
         """Format the scope result for terminal display.
@@ -324,7 +337,7 @@ class ScopeResult:
             lines.append("")
 
         annotations = _milestone_annotations(
-            self.page, self.marg, self.page_end, self.marg_end
+            self.page, self.marg, self.page_end, self.marg_end, self.date
         )
         suffix = f", {', '.join(annotations)}" if annotations else ""
         lines.append(f"[Blocks {self.block_start}-{self.block_end}{suffix}]")
@@ -353,7 +366,7 @@ class ScopeResult:
 
         attrs = f'start="{self.block_start}" end="{self.block_end}"'
         attrs += _milestone_xml_attrs(
-            self.page, self.marg, self.page_end, self.marg_end
+            self.page, self.marg, self.page_end, self.marg_end, self.date
         )
         lines.append(f"<scope {attrs}>")
         lines.append(self.block_text)

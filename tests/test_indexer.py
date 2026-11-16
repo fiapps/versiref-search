@@ -726,9 +726,9 @@ FRONTMATTER_VARIANT = (
     "---\n\n" + MARKED_BODY
 )
 
-# The same document with the frontmatter resolved by hand into the heading
-# that indexing would synthesize from it.
-RESOLVED_VARIANT = "# Ad Caeli Reginam\n\n" + MARKED_BODY
+# The same document with the frontmatter resolved by hand into the date marker
+# and heading that indexing would synthesize from it.
+RESOLVED_VARIANT = "<!-- date: 1954-10-11 -->\n\n# Ad Caeli Reginam\n\n" + MARKED_BODY
 
 
 def _index_contents(tmp_path, name, text, ref_style):
@@ -871,3 +871,70 @@ def test_failed_append_rolls_back(tmp_path, minimal_md, ref_style, monkeypatch):
         index_document(minimal_md, db_path, metadata, ref_style, append=True)
     monkeypatch.undo()
     assert _block_count(db_path) == before
+
+
+# --- Date milestones ---
+
+
+def _date_milestones(db_path: Path) -> list[tuple[int, str]]:
+    with Database(db_path) as db:
+        count = db.count_content_blocks()
+        found = db.get_milestones_in_range(1, count, types=("date",))
+    return [(block, m.value) for block, ms in found.items() for m in ms]
+
+
+def _index_text(tmp_path, ref_style, text: str, name: str = "dated") -> Path:
+    source = tmp_path / f"{name}.md"
+    source.write_text(text, encoding="utf-8")
+    db_path = tmp_path / f"{name}.db"
+    index_document(source, db_path, {"title": "T", "versification": "eng"}, ref_style)
+    return db_path
+
+
+def test_frontmatter_date_dates_the_document_from_its_first_block(tmp_path, ref_style):
+    db_path = _index_text(
+        tmp_path, ref_style, "---\ndate: 1896-09-20\ntitle: Fidentem\n---\n\nText.\n"
+    )
+    assert _date_milestones(db_path) == [(1, "1896-09-20")]
+    assert get_index_stats(db_path)["milestone_counts"] == {"date": 1}
+
+
+def test_frontmatter_date_without_title_heading(tmp_path, ref_style):
+    db_path = _index_text(tmp_path, ref_style, "---\ndate: 1896-09\n---\n\nText.\n")
+    assert _date_milestones(db_path) == [(1, "1896-09")]
+
+
+def test_opening_date_marker_overrides_frontmatter(tmp_path, ref_style):
+    db_path = _index_text(
+        tmp_path,
+        ref_style,
+        "---\ndate: 1896-09-20\n---\n\n<!-- date: 1900-01-01 -->\n\nText.\n",
+    )
+    assert _date_milestones(db_path) == [(1, "1900-01-01")]
+
+
+def test_date_markers_within_a_document(tmp_path, ref_style):
+    db_path = _index_text(
+        tmp_path,
+        ref_style,
+        "<!-- date: 1890-01-01 -->\n\nFirst letter.\n\n"
+        "<!-- date: 1891-02-02 -->\n\nSecond letter.\n",
+    )
+    assert _date_milestones(db_path) == [(1, "1890-01-01"), (2, "1891-02-02")]
+
+
+@pytest.mark.parametrize("value", ["January 28, 1987", "6 December 1995", "1987-1-28"])
+def test_non_iso_date_is_kept_and_reported(tmp_path, ref_style, caplog, value):
+    with caplog.at_level(logging.WARNING, logger="versiref.search.indexer"):
+        db_path = _index_text(
+            tmp_path, ref_style, f'---\ndate: "{value}"\n---\n\nText.\n'
+        )
+    assert _date_milestones(db_path) == [(1, value)]
+    assert f'Date "{value}" is not in ISO 8601 form' in caplog.text
+
+
+@pytest.mark.parametrize("value", ["1896", "1896-09", "1896-09-20"])
+def test_iso_date_of_any_precision_draws_no_warning(tmp_path, ref_style, caplog, value):
+    with caplog.at_level(logging.WARNING, logger="versiref.search.indexer"):
+        _index_text(tmp_path, ref_style, f"<!-- date: {value} -->\n\nText.\n")
+    assert "ISO 8601" not in caplog.text

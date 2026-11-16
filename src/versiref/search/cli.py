@@ -17,6 +17,7 @@ from .searcher import (
     DEFAULT_MAX_SECTION_BLOCKS,
     SectionTooLargeError,
     get_context,
+    get_date_context,
     get_marg_context,
     get_page_context,
     get_section_by_block,
@@ -561,6 +562,12 @@ def docs(name: str | None) -> None:
     help="Retrieve the blocks of a marginal-number passage (requires marg milestones)",
 )
 @click.option(
+    "--date",
+    "date_value",
+    default=None,
+    help="Retrieve the blocks of a dated document or item (requires date milestones)",
+)
+@click.option(
     "--max-blocks",
     type=int,
     default=DEFAULT_MAX_SECTION_BLOCKS,
@@ -580,12 +587,13 @@ def show(
     heading_text: str | None,
     page_value: str | None,
     marg_value: str | None,
+    date_value: str | None,
     max_blocks: int,
     include_headings: bool,
 ) -> None:
     r"""Retrieve content blocks from a database.
 
-    Five modes:
+    Six modes:
 
     \b
       Range:            --start S --end E
@@ -593,32 +601,34 @@ def show(
       Section by text:  --heading TEXT --section L
       Page:             --page VALUE     (add --start to pick one of several)
       Marginal number:  --marg VALUE     (add --start to pick one of several)
+      Date:             --date VALUE     (add --start to pick one of several)
 
     Blocks are returned in document order.
     """
     try:
-        if page_value is not None and marg_value is not None:
-            raise click.UsageError("--page cannot be combined with --marg")
-        if page_value is not None:
-            if any(option is not None for option in (end, section_level, heading_text)):
-                raise click.UsageError(
-                    "--page cannot be combined with --end/--section/--heading"
-                )
-            blocks = get_page_context(
-                db_path=database,
-                page=page_value,
-                include_headings=include_headings,
-                max_blocks=max_blocks,
-                start_id=start,
+        milestone_modes = [
+            (flag, value, getter)
+            for flag, value, getter in (
+                ("--page", page_value, get_page_context),
+                ("--marg", marg_value, get_marg_context),
+                ("--date", date_value, get_date_context),
             )
-        elif marg_value is not None:
+            if value is not None
+        ]
+        if len(milestone_modes) > 1:
+            raise click.UsageError(
+                f"{milestone_modes[0][0]} cannot be combined with "
+                f"{milestone_modes[1][0]}"
+            )
+        if milestone_modes:
+            flag, value, getter = milestone_modes[0]
             if any(option is not None for option in (end, section_level, heading_text)):
                 raise click.UsageError(
-                    "--marg cannot be combined with --end/--section/--heading"
+                    f"{flag} cannot be combined with --end/--section/--heading"
                 )
-            blocks = get_marg_context(
-                db_path=database,
-                marg=marg_value,
+            blocks = getter(
+                database,
+                value,
                 include_headings=include_headings,
                 max_blocks=max_blocks,
                 start_id=start,

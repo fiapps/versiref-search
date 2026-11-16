@@ -14,6 +14,7 @@ from .database import (
     MILESTONE_END,
     PRODUCT_NAME,
     SCHEMA_VERSION,
+    VALUE_MILESTONE_TYPES,
     Database,
 )
 from .markdown_parser import parse_markdown, split_frontmatter
@@ -21,6 +22,10 @@ from .markdown_parser import parse_markdown, split_frontmatter
 logger = logging.getLogger(__name__)
 
 InvalidRefAction = Literal["warn", "exclude", "ignore"]
+
+# A date milestone is expected in ISO 8601 form, to whatever precision is
+# known: a year, a year and month, or a full date.
+_ISO_DATE_RE = re.compile(r"\d{4}(-\d{2}(-\d{2})?)?")
 
 # A book number and the abbreviation it qualifies, as in "1 PL".
 _NUMBERED_BOOK_RE = re.compile(r"(?:[1-4]|[IV]+)\s+(.+)")
@@ -366,11 +371,18 @@ def index_document(
 
             # Milestones extracted from this block's source text
             for milestone in block.milestones:
-                if milestone.type in ("page", "marg"):
+                if milestone.type in VALUE_MILESTONE_TYPES:
                     # "end" in any letter case ends the run of the last value.
                     value = milestone.value
                     if value.strip().lower() == MILESTONE_END:
                         value = MILESTONE_END
+                    elif milestone.type == "date" and not _ISO_DATE_RE.fullmatch(value):
+                        logger.warning(
+                            'Date "%s" is not in ISO 8601 form (e.g. 1896-09-20); '
+                            "it is recorded as written, but will not sort or "
+                            "be found by its ISO form.",
+                            value,
+                        )
                     db.insert_milestone(
                         milestone.type, value, content_id, milestone.offset
                     )

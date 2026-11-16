@@ -1105,3 +1105,58 @@ def test_database_without_boundaries_reads_as_before(two_document_db, ref_style)
     (hit,) = search_database(two_document_db, ref_style, reference_query="Rom 3:23")
     assert hit.page == "6"
     assert 1 in hit.heading_context
+
+
+# --- Date milestones ---
+
+
+@pytest.fixture
+def dated_db(tmp_path, ref_style):
+    """Database of three documents: two dated by frontmatter, one undated."""
+    sources = {
+        "a.md": "---\ndate: 1896-09-20\ntitle: Fidentem\n---\n\nA cites Lk 1:28.\n\n"
+        "A second paragraph.\n",
+        "b.md": "---\ndate: 1954-10-11\ntitle: Ad Caeli\n---\n\nB cites Rom 3:23.\n",
+        "c.md": "C is undated, citing Jn 3:16.\n",
+    }
+    paths = []
+    for name, text in sources.items():
+        path = tmp_path / name
+        path.write_text(text, encoding="utf-8")
+        paths.append(path)
+    db_path = tmp_path / "dated.db"
+    from versiref.search import index_documents
+
+    index_documents(paths, db_path, {"title": "T", "versification": "eng"}, ref_style)
+    return db_path
+
+
+def test_search_result_carries_its_documents_date(dated_db, ref_style):
+    (hit,) = search_database(dated_db, ref_style, reference_query="Rom 3:23")
+    assert hit.date == "1954-10-11"
+    assert f"[Block {hit.block_id}, date 1954-10-11]" in hit.format_for_display()
+    assert 'date="1954-10-11"' in hit.format_xml()
+
+
+def test_undated_document_does_not_inherit_a_date(dated_db, ref_style):
+    (hit,) = search_database(dated_db, ref_style, reference_query="Jn 3:16")
+    assert hit.date is None
+    assert f"[Block {hit.block_id}]" in hit.format_for_display()
+
+
+def test_get_date_context_returns_the_whole_document(dated_db):
+    from versiref.search import get_date_context
+
+    blocks = get_date_context(dated_db, "1896-09-20")
+    assert [b.text for b in blocks] == [
+        "<!-- date: 1896-09-20 --> # Fidentem",
+        "A cites Lk 1:28.",
+        "A second paragraph.",
+    ]
+
+
+def test_get_date_context_missing_date_hints_neighbors(dated_db):
+    from versiref.search import get_date_context
+
+    with pytest.raises(ValueError, match="between recorded dates"):
+        get_date_context(dated_db, "1900-01-01")

@@ -45,6 +45,7 @@ Each result includes:
 - **Block ID**: a sequential identifier that can be used with the `show` command to retrieve surrounding content.
 - **Page**: when the database was indexed with page milestones, the page of the printed edition the block falls on (e.g., `[Block 42, page 204]`, or `page="204"` in XML output). With sparse page milestones this is the most recent *recorded* page before the block.
 - **Marg**: when the database was indexed with marg milestones, the marginal number of the block (e.g., `[Block 42, marg 652]`, or `marg="652"` in XML output). With sparse marg milestones this is the most recent *recorded* value before the block. Both page and marg appear together when the database has both (e.g., `[Block 42, page 204, marg 652]`).
+- **Date**: when the database was indexed with date milestones, the date of the document or dated item the block belongs to (e.g., `[Block 42, date 1896-09-20]`, or `date="1896-09-20"` in XML output). In a collection of dated documents this identifies the document a hit came from.
 
 When a page break or marginal number falls *inside* the block, the result reports a range rather than a single value — `[Block 42, pages 204-205]` (`page="204" page_end="205"` in XML), `[Block 42, marg 652-653]` — and the block text carries the marker at the point where the value changes:
 
@@ -268,6 +269,19 @@ versiref-search show mybook.db --marg 652
 This works exactly like `--page` (same inclusive-span, sparse-milestone, end-of-run, repeated-value, and `--max-blocks` behavior, and the same restrictions on combining it with other options), except the milestone type queried is `marg` instead of `page`.
 Values with a trailing letter (e.g. `652a`, inserted between `652` and `653` in editions that do so) are looked up like any other value and sort correctly relative to their base number for the "nearby recorded values" hint on a miss, including runs long enough to continue past `z` by doubling the letter (`aa`, `bb`, `cc`, …) instead of restarting at `aa`, `ab`, `ac`, ….
 
+### Retrieving a Dated Document
+
+For databases indexed with date milestones, `--date` retrieves the document or item carrying a date:
+
+```sh
+versiref-search show collection.db --date 1896-09-20
+```
+
+A document dated by its frontmatter is returned whole.
+An item dated by a marker within a file runs through the block where the next dated item begins.
+The date must be given as it was recorded; if it is not found, the error names the recorded dates around it.
+When two documents share a date, `show` lists them with their block IDs and file names, and `--start` chooses one, as for `--page`.
+
 ## Table of Contents
 
 To survey a database's heading structure, use the `toc` command:
@@ -346,12 +360,13 @@ Databases with milestones report how many of each type they record (`page milest
 
 | Option | Description |
 | ------ | ----------- |
-| `--start` | Starting block ID (inclusive); also the anchor block for `--section`, and the block from which `--page`/`--marg` look for a value recorded more than once |
+| `--start` | Starting block ID (inclusive); also the anchor block for `--section`, and the block from which `--page`/`--marg`/`--date` look for a value recorded more than once |
 | `--end` | Ending block ID (inclusive); extends a `--section` request to span sections |
 | `--section` | Retrieve a whole section at this heading level (1–6) |
 | `--heading` | Select a section by matching its heading text (use with `--section`) |
 | `--page` | Retrieve the blocks of a printed page (requires page milestones) |
 | `--marg` | Retrieve the blocks of a marginal-number passage (requires marg milestones) |
+| `--date` | Retrieve the blocks of a dated document or item (requires date milestones) |
 | `--max-blocks` | Refuse to return a section larger than this many blocks (default: 200) |
 | `--include-headings` | Include the headings above the range/section |
 
@@ -362,5 +377,5 @@ No additional options.
 
 ## Python API
 
-The `versiref.search` package exports `search_database`, `search_commentary`, `get_context`, `get_page_context`, `get_marg_context`, `get_section_by_block`, `get_section_by_heading`, and `get_index_stats` for programmatic use.
+The `versiref.search` package exports `search_database`, `search_commentary`, `get_context`, `get_page_context`, `get_marg_context`, `get_date_context`, `get_section_by_block`, `get_section_by_heading`, and `get_index_stats` for programmatic use.
 See their docstrings for full parameter documentation.

@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `search --phrase` (`-p`) searches for text exactly as written. `--string` reads its argument as an FTS5 search expression, so ordinary text containing punctuation, such as "God-bearer" or "Isa 7:14", was refused with an obscure error; `--phrase` finds those words in sequence. `search_database` takes a matching `phrase_query` argument.
-- `<!-- page: end -->` and `<!-- marg: end -->` end the run of a page or marginal number, for material the number does not apply to, such as text added in an electronic edition or an appendix after the last numbered excerpt. Results there report no page, and `show --page` stops at the marker.
+- Date milestones. A document is dated by `date:` in its YAML frontmatter, or by a `<!-- date: 1896-09-20 -->` marker for dated items within one file. Search results report the date of each hit (`[Block 42, date 1896-09-20]`, `date="…"` in XML), which identifies the document a hit came from in a collection, and `show --date` retrieves a dated document. Dates are expected in ISO 8601 form; others are recorded as written, with a warning. Re-index to pick up dates from frontmatter.
+- `<!-- page: end -->`, `<!-- marg: end -->`, and `<!-- date: end -->` end the run of a page, marginal number, or date, for material the number does not apply to, such as text added in an electronic edition or an appendix after the last numbered excerpt. Results there report no page, and `show --page` stops at the marker.
 
 ### Changed
 

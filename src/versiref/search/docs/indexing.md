@@ -298,6 +298,7 @@ title: Diuturni Temporis
 ```
 
 The block is recognized only at the very start of the file, and it is **not indexed**: its keys are neither searchable text nor document metadata.
+Two keys are put to use, `title` and `date`.
 (Document metadata comes from the metadata file; see [Metadata File](#metadata-file).)
 A leading `---` that is not followed by a YAML mapping keeps its ordinary Markdown meaning as a thematic break, and a warning says so.
 
@@ -310,15 +311,18 @@ Two cases leave the document as it is, since it already heads itself:
 The level is set with [`frontmatter_title_level`](#frontmatter_title_level).
 A collection that reserves level 1 for a heading of its own — an overview document heading the whole corpus, say — will want its documents at level 2, or no title heading at all.
 
+When the frontmatter declares a `date`, the document is dated from its first block, exactly as if it opened with a `<!-- date: ... -->` marker (see [Date Milestones](#date-milestones)).
+A date marker written at the very top of the document takes precedence over the frontmatter.
+
 ## Milestones
 
 Milestones are markers embedded in the source Markdown as HTML comments.
 They are **stripped from the stored text** at indexing time and recorded in a separate index, so they never interfere with phrase matching or reference scanning.
-Page and marg markers are put back into the text of results and `show` output, at the character position they were stripped from, so a break falling mid-block stays visible (see [searching.md](searching.md)).
-Three milestone types are recognized; any other HTML comment is left in the text untouched.
+Page, marg, and date markers are put back into the text of results and `show` output, at the character position they were stripped from, so a break falling mid-block stays visible (see [searching.md](searching.md)).
+Four milestone types are recognized; any other HTML comment is left in the text untouched.
 The type may be written in any letter case (`<!-- Page: 204 -->`).
 
-A comment whose type is a near miss for one of the three, such as `<!-- pgae: 204 -->` or `<!-- pages: 204 -->`, is still left in the text, but indexing warns about it, because a misspelled marker records nothing and every result after it would report the wrong page.
+A comment whose type is a near miss for one of the four, such as `<!-- pgae: 204 -->` or `<!-- pages: 204 -->`, is still left in the text, but indexing warns about it, because a misspelled marker records nothing and every result after it would report the wrong page.
 The warning quotes the comment so you can find it in the source; a type repeated through a document is reported once, with a count.
 Unrelated comments such as `<!-- TODO: check this -->` draw no warning.
 
@@ -362,9 +366,30 @@ That works as a plain value — index it with `<!-- marg: 652a -->` — and it a
 When a run of letters is long enough to exhaust the alphabet, Jurgens continues by doubling the letter rather than restarting at `aa`, `ab`, `ac`, …: the longest such run, between Rouet's 651 and 652, goes `651a` … `651z`, `651aa`, `651bb`, `651cc`, `651dd`.
 That sorts correctly too — a repeated-letter suffix of length *n* on the *k*-th letter is ordered as sub-ordinal `(n - 1) * 26 + k`.
 
-### Ending a Page or Marginal-Number Run
+### Date Milestones
 
-A page or marginal number stays in effect until the next one, or the end of its file.
+A date milestone records the date of the text that follows — the date an encyclical was issued, an audience given, or a letter written:
+
+```markdown
+<!-- date: 1896-09-20 -->
+
+# Fidentem Piumque Animum
+
+The text of the encyclical.
+```
+
+Most often the date comes from the document's frontmatter instead (`date: 1896-09-20`), which dates the whole file with no marker needed.
+Markers are for dating items within one file, such as a collection of letters: each marker dates everything up to the next one.
+
+With date milestones present, search results report the date of each hit (`[Block 42, date 1896-09-20]`), which tells you which document of a collection the hit came from, and `show --date` retrieves a dated document or item (see [searching.md](searching.md)).
+In a database built from several files, a file with no date reports none; it does not take the date of the file before it.
+
+Write dates in ISO 8601 form, to whatever precision is known: `1896-09-20`, `1896-09`, or `1896`.
+Any other form, such as `September 20, 1896`, is recorded as written but draws a warning, since it will not sort with the others or be found by its ISO form.
+
+### Ending a Page, Marginal-Number, or Date Run
+
+A page, marginal number, or date stays in effect until the next one, or the end of its file.
 Where material follows that the number does not apply to — text added in an electronic edition that is on no printed page, or an appendix after the last numbered excerpt — end the run with the value `end`:
 
 ```markdown
@@ -380,8 +405,8 @@ Text of page 312.
 ```
 
 Results in the note report no page, and `show --page 311` stops where the run ends.
-`<!-- marg: end -->` works the same way.
-The value `end` (in any letter case) is therefore reserved and cannot name a page or marginal number.
+`<!-- marg: end -->` and `<!-- date: end -->` work the same way.
+The value `end` (in any letter case) is therefore reserved and cannot name a page, marginal number, or date.
 
 ### Scope Milestones
 

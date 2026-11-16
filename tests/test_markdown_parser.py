@@ -425,7 +425,7 @@ def test_misspelled_milestone_is_kept_and_reported(written, intended, caplog):
     assert f"<!-- {written}: 204 -->" in caplog.text
 
 
-@pytest.mark.parametrize("written", ["TODO", "note", "date", "image", "source"])
+@pytest.mark.parametrize("written", ["TODO", "note", "name", "image", "source"])
 def test_unrelated_typed_comment_draws_no_warning(written, caplog):
     with caplog.at_level(logging.WARNING, logger="versiref.search.markdown_parser"):
         blocks = parse_markdown(f"Text <!-- {written}: something --> more.\n")
