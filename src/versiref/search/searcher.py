@@ -4,7 +4,8 @@ import re
 import sqlite3
 from pathlib import Path
 from typing import Any
-from versiref import Versification, RefParser, RefStyle
+
+from versiref import RefParser, RefStyle, Versification
 
 from .database import MILESTONE_END, Database
 from .models import (

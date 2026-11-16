@@ -3,7 +3,6 @@
 from pathlib import Path
 
 from versiref import RefStyle, Versification
-
 from versiref.search import (
     VersificationScore,
     analyze_abbreviations,

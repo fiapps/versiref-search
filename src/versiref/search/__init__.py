@@ -5,9 +5,9 @@ from versiref.search.database import Database, IncompatibleDatabaseError
 from versiref.search.indexer import (
     InvalidRefAction,
     find_unrecognized_abbreviations,
+    get_index_stats,
     index_document,
     index_documents,
-    get_index_stats,
 )
 from versiref.search.models import (
     AbbreviationAnalysis,

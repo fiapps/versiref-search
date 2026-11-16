@@ -4,17 +4,19 @@ import re
 import sys
 from importlib.resources import files
 from pathlib import Path
+
 import click
 import yaml
+
 from versiref import RefStyle, Sensitivity
 
 from .analyzer import analyze_abbreviations, analyze_documents
-from .indexer import index_documents, get_index_stats
+from .indexer import get_index_stats, index_documents
 from .models import AbbreviationAnalysis, VersificationScore
 from .searcher import (
+    DEFAULT_MAX_SECTION_BLOCKS,
     AmbiguousMilestoneError,
     AmbiguousSectionError,
-    DEFAULT_MAX_SECTION_BLOCKS,
     SectionTooLargeError,
     get_context,
     get_date_context,

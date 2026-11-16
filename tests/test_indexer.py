@@ -1,18 +1,19 @@
 """Tests for the indexer module."""
 
 import logging
-import pytest
 from pathlib import Path
+
+import pytest
 
 from versiref import RefStyle, standard_names
 from versiref.search import (
+    IncompatibleDatabaseError,
+    find_unrecognized_abbreviations,
+    get_index_stats,
     index_document,
     index_documents,
-    get_index_stats,
-    find_unrecognized_abbreviations,
 )
-from versiref.search import IncompatibleDatabaseError
-from versiref.search.database import Database, SCHEMA_VERSION
+from versiref.search.database import SCHEMA_VERSION, Database
 
 SAMPLE_MD = Path(__file__).parent / "data" / "irenaeus-ah-3.21.md"
 

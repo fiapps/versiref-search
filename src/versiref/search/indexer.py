@@ -4,9 +4,10 @@ import logging
 import os
 import re
 from collections.abc import Callable, Sequence
-from typing import Literal
 from pathlib import Path
-from versiref import Versification, RefParser, RefStyle, Sensitivity
+from typing import Literal
+
+from versiref import RefParser, RefStyle, Sensitivity, Versification
 
 from .analyzer import _scan_unrecognized
 from .database import (

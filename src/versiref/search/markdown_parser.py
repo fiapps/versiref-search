@@ -5,8 +5,10 @@ import difflib
 import logging
 import re
 from typing import Any
+
 import mistune
 import yaml
+
 from .models import BlockInfo, RawMilestone
 
 logger = logging.getLogger(__name__)

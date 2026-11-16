@@ -1,9 +1,10 @@
 """Shared fixtures for versiref-search tests."""
 
-import pytest
 from pathlib import Path
-from versiref import RefStyle
 
+import pytest
+
+from versiref import RefStyle
 from versiref.search import index_document
 
 SAMPLE_MD = Path(__file__).parent / "data" / "irenaeus-ah-3.21.md"

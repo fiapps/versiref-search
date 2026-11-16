@@ -1,6 +1,6 @@
 """Tests for the searcher module."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -19,7 +19,7 @@ from versiref.search import (
     search_database,
 )
 from versiref.search.database import Database
-from versiref.search.searcher import _nearby_milestone_hint, _milestone_sort_key
+from versiref.search.searcher import _milestone_sort_key, _nearby_milestone_hint
 
 
 @pytest.fixture
@@ -480,7 +480,7 @@ def test_query_versification_same_as_db(indexed_db, ref_style):
 
 def test_query_versification_different_from_db(tmp_path, ref_style):
     """When query_versification differs, the reference is mapped to the db scheme."""
-    from versiref import Versification, RefParser
+    from versiref import RefParser, Versification
     from versiref.search import index_document
 
     # Index a document using lxx versification.

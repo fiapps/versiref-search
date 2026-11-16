@@ -1,11 +1,12 @@
 """Tests for Database operations."""
 
 import pytest
+
 from versiref.search.database import (
-    Database,
-    IncompatibleDatabaseError,
     PRODUCT_NAME,
     SCHEMA_VERSION,
+    Database,
+    IncompatibleDatabaseError,
     _parse_schema_version,
 )
 
@@ -288,7 +289,7 @@ def test_search_by_string_not_found(db):
 def test_search_by_string_returns_highlighted_text(db):
     db.insert_content("Specific content.")
     results = db.search_by_string("Specific")
-    assert "<mark>Specific</mark> content." == results[0][1]
+    assert results[0][1] == "<mark>Specific</mark> content."
 
 
 def test_search_by_string_word_boundary(db):

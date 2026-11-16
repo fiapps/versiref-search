@@ -17,7 +17,6 @@ from versiref import (
 
 from .models import AbbreviationAnalysis, VersificationScore
 
-
 _LANG_PREFIX_RE = re.compile(r"^([a-z]{2,3})-")
 
 # Well-formed Roman numeral up to 499 (chapters never exceed CL), in either

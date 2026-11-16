@@ -3,11 +3,10 @@
 from pathlib import Path
 
 from click.testing import CliRunner
-from versiref import RefStyle, Versification
 
+from versiref import RefStyle, Versification
 from versiref.search import index_document
 from versiref.search.cli import main
-
 
 MINIMAL_MD_A = """\
 # Document A
