@@ -440,3 +440,14 @@ def test_repeated_misspelling_is_reported_once_with_a_count(caplog):
     assert caplog.text.count("misspelled") == 1
     assert "<!-- pgae: 1 -->" in caplog.text
     assert "(2 like it)" in caplog.text
+
+
+def test_table_keeps_its_rows_on_separate_lines():
+    source = "| a | b |\n|---|:-:|\n| 1 | 2 |\n"
+    blocks = parse_markdown(source)
+    assert blocks[0].text == "| a | b |\n|---|:-:|\n| 1 | 2 |"
+
+
+def test_ordinary_paragraph_lines_are_still_joined():
+    blocks = parse_markdown("One line | with a pipe\nand a second line.\n")
+    assert blocks[0].text == "One line | with a pipe and a second line."

@@ -332,7 +332,12 @@ def _extract_block(
     # Paragraph. ``block_text`` is what mistune gives a tight list item's
     # content in place of a paragraph; it holds the same inline children.
     elif token_type in ("paragraph", "block_text"):
-        text = _extract_inline_text(token.get("children", []))
+        children = token.get("children", [])
+        # A table reaches us as a paragraph of rows. Its line breaks are its
+        # structure, so keep them rather than joining the rows into one line.
+        text = _extract_inline_text(children, softbreak="\n")
+        if not _is_table(text):
+            text = _extract_inline_text(children)
         if text:
             return text, None
 
@@ -398,11 +403,27 @@ def _extract_block(
     return None, None
 
 
-def _extract_inline_text(children: list[dict[str, Any]]) -> str:
+# The delimiter row under a table's header: "|---|:--:|" and the like.
+_TABLE_DELIMITER_RE = re.compile(r"\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*")
+
+
+def _is_table(text: str) -> bool:
+    """Tell whether paragraph text, with its line breaks kept, is a pipe table."""
+    lines = text.split("\n")
+    return (
+        len(lines) >= 2
+        and "|" in lines[0]
+        and "|" in lines[1]
+        and _TABLE_DELIMITER_RE.fullmatch(lines[1]) is not None
+    )
+
+
+def _extract_inline_text(children: list[dict[str, Any]], softbreak: str = " ") -> str:
     """Extract text from inline elements (recursively).
 
     Args:
         children: List of inline token children
+        softbreak: What a line break within a paragraph becomes
 
     Returns:
         Concatenated text from all inline elements
@@ -417,12 +438,12 @@ def _extract_inline_text(children: list[dict[str, Any]]) -> str:
 
         elif child_type == "emphasis":
             # Italic text
-            inner = _extract_inline_text(child.get("children", []))
+            inner = _extract_inline_text(child.get("children", []), softbreak)
             parts.append(f"*{inner}*")
 
         elif child_type == "strong":
             # Bold text
-            inner = _extract_inline_text(child.get("children", []))
+            inner = _extract_inline_text(child.get("children", []), softbreak)
             parts.append(f"**{inner}**")
 
         elif child_type == "codespan":
@@ -431,7 +452,7 @@ def _extract_inline_text(children: list[dict[str, Any]]) -> str:
 
         elif child_type == "link":
             # Link
-            inner = _extract_inline_text(child.get("children", []))
+            inner = _extract_inline_text(child.get("children", []), softbreak)
             url = child.get("attrs", {}).get("url", "")
             parts.append(f"[{inner}]({url})")
 
@@ -445,7 +466,7 @@ def _extract_inline_text(children: list[dict[str, Any]]) -> str:
             parts.append("\n")
 
         elif child_type == "softbreak":
-            parts.append(" ")
+            parts.append(softbreak)
 
         elif child_type == "inline_html":
             parts.append(child.get("raw", ""))
@@ -453,7 +474,7 @@ def _extract_inline_text(children: list[dict[str, Any]]) -> str:
         else:
             # For any other inline type, try to extract children
             if "children" in child:
-                parts.append(_extract_inline_text(child.get("children", [])))
+                parts.append(_extract_inline_text(child.get("children", []), softbreak))
             elif "raw" in child:
                 parts.append(child.get("raw", ""))
 

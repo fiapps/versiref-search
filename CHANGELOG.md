@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `show --page` and `show --marg` no longer silently return the first match when the value is recorded more than once, as when each document of a collection restarts its page numbers. They list the places with their block IDs and file names, and `--start` chooses one.
 - A milestone comment with a misspelled type, such as `<!-- pgae: 204 -->`, is now reported when indexing. It was indexed as ordinary text with no warning, so the page break silently went unrecorded and later results reported the page before it. The comment is still left in the text; unrelated comments such as `<!-- TODO: … -->` draw no warning.
 - Milestone types are recognized in any letter case. `<!-- Page: 204 -->` was silently treated as an ordinary comment.
+- A table keeps its rows on separate lines. It was stored as a single line, with header, delimiter, and rows run together.
 
 ## 0.10.1 - 2026-08-16
 
