@@ -136,7 +136,7 @@ def test_parse_schema_version_valid():
 
 @pytest.mark.parametrize("value", ["1", "1.0.0", "x.y", "1.x", ""])
 def test_parse_schema_version_invalid(value):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"major\.minor|must be integers"):
         _parse_schema_version(value)
 
 
@@ -176,7 +176,7 @@ def test_get_content_by_missing_id_returns_none(db):
 
 def test_get_content_range(db):
     id1 = db.insert_content("Block 1")
-    id2 = db.insert_content("Block 2")
+    db.insert_content("Block 2")
     id3 = db.insert_content("Block 3")
     rows = db.get_content_range(id1, id3)
     assert len(rows) == 3
@@ -184,7 +184,7 @@ def test_get_content_range(db):
 
 
 def test_get_content_range_partial(db):
-    id1 = db.insert_content("Block 1")
+    db.insert_content("Block 1")
     id2 = db.insert_content("Block 2")
     id3 = db.insert_content("Block 3")
     rows = db.get_content_range(id2, id3)

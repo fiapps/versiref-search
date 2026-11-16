@@ -2,8 +2,10 @@
 
 import re
 import sys
+from collections.abc import Sequence
 from importlib.resources import files
 from pathlib import Path
+from typing import Any
 
 import click
 import yaml
@@ -12,7 +14,12 @@ from versiref import RefStyle, Sensitivity
 
 from .analyzer import analyze_abbreviations, analyze_documents
 from .indexer import get_index_stats, index_documents
-from .models import AbbreviationAnalysis, VersificationScore
+from .models import (
+    AbbreviationAnalysis,
+    ScopeResult,
+    SearchResult,
+    VersificationScore,
+)
 from .searcher import (
     DEFAULT_MAX_SECTION_BLOCKS,
     AmbiguousMilestoneError,
@@ -29,8 +36,11 @@ from .searcher import (
     search_database,
 )
 
+# What one database contributes to a search: citations, or commentary scopes.
+_Results = Sequence[SearchResult | ScopeResult]
 
-def _load_metadata(path: Path) -> dict:
+
+def _load_metadata(path: Path) -> dict[str, Any]:
     """Load metadata from a YAML file.
 
     The file may optionally use YAML front-matter delimiters (``---``).
@@ -47,7 +57,7 @@ def _load_metadata(path: Path) -> dict:
     return data
 
 
-def _load_config(path: Path) -> dict:
+def _load_config(path: Path) -> dict[str, Any]:
     """Load an indexing config from a YAML file.
 
     Resolves the ``metadata`` path relative to the config file's directory.
@@ -133,7 +143,7 @@ def index(
     config file specified with -c.
     """
     try:
-        config: dict = {}
+        config: dict[str, Any] = {}
         if config_file is not None:
             config = _load_config(config_file)
 
@@ -179,7 +189,7 @@ def index(
             raise ValueError(
                 f"Invalid parser_sensitivity '{sensitivity_value}'. "
                 f"Valid values: {valid}"
-            )
+            ) from None
 
         # Resolve invalid_references from config
         invalid_references = config.get("invalid_references", "warn")
@@ -247,7 +257,7 @@ def index(
 
 
 def _output_search_plain(
-    all_db_results: list[tuple[Path, list]],
+    all_db_results: list[tuple[Path, _Results]],
     total_count: int,
     show_headings: bool,
 ) -> None:
@@ -279,7 +289,7 @@ def _output_search_plain(
 
 
 def _output_search_xml(
-    all_db_results: list[tuple[Path, list]],
+    all_db_results: list[tuple[Path, _Results]],
     total_count: int,
     show_headings: bool,
 ) -> None:
@@ -425,9 +435,9 @@ def search(
         ref_style = RefStyle.named(style)
         total_count = 0
 
-        all_db_results: list[tuple[Path, list]] = []
+        all_db_results: list[tuple[Path, _Results]] = []
         for database in databases:
-            results: list
+            results: _Results
             if commentary:
                 assert reference is not None
                 results = search_commentary(
@@ -855,7 +865,7 @@ def analyze(
     metadata file) is flagged with ``*`` in the ranking.
     """
     try:
-        config: dict = {}
+        config: dict[str, Any] = {}
         if config_file is not None:
             config = _load_config(config_file)
 
@@ -880,7 +890,7 @@ def analyze(
             raise ValueError(
                 f"Invalid parser_sensitivity '{sensitivity_value}'. "
                 f"Valid values: {valid}"
-            )
+            ) from None
 
         # Whitelist comes from the config only.
         whitelist = config.get("abbreviations_whitelist")
@@ -934,7 +944,7 @@ def analyze(
         sys.exit(1)
 
 
-def _resolve_configured_versification(config: dict) -> str | None:
+def _resolve_configured_versification(config: dict[str, Any]) -> str | None:
     """Find the configured versification, if any, for the analyze ranking marker.
 
     Prefers ``config["versification"]``; falls back to the ``versification``

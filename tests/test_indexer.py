@@ -79,7 +79,7 @@ def test_failed_reindex_leaves_existing_db_intact(tmp_path, minimal_md, ref_styl
     index_document(minimal_md, db_path, meta, ref_style)
     before = get_index_stats(db_path)
     # A call that fails validation must not delete the good database.
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid versification"):
         index_document(
             minimal_md, db_path, {"title": "Bad", "versification": "nope"}, ref_style
         )
@@ -819,7 +819,7 @@ def test_failed_rebuild_keeps_the_existing_database(tmp_path, minimal_md, ref_st
     index_document(minimal_md, db_path, metadata, ref_style)
     before = _block_count(db_path)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid versification"):
         index_document(
             minimal_md, db_path, {"title": "T", "versification": "nonesuch"}, ref_style
         )

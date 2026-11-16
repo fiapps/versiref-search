@@ -68,7 +68,7 @@ def _parse_schema_version(value: str) -> tuple[int, int]:
     try:
         return int(parts[0]), int(parts[1])
     except ValueError:
-        raise ValueError("major and minor must be integers")
+        raise ValueError("major and minor must be integers") from None
 
 
 SCHEMA_SQL = """
@@ -285,7 +285,7 @@ class Database:
         except ValueError as e:
             raise IncompatibleDatabaseError(
                 f"{self.db_path}: unparseable schema_version '{version}': {e}"
-            )
+            ) from e
 
         req_major, req_minor = _parse_schema_version(REQUIRED_SCHEMA_VERSION)
         if db_major != req_major or db_minor < req_minor:
@@ -1069,7 +1069,8 @@ class Database:
             raise RuntimeError("Database not connected")
 
         cursor = self.conn.execute("SELECT MAX(id) AS max_id FROM content")
-        return cursor.fetchone()["max_id"]
+        max_id: int | None = cursor.fetchone()["max_id"]
+        return max_id
 
     def count_content_range(self, start_id: int, end_id: int) -> int:
         """Count content blocks with ID in ``[start_id, end_id]`` (inclusive)."""
@@ -1080,7 +1081,8 @@ class Database:
             "SELECT COUNT(*) AS count FROM content WHERE id >= ? AND id <= ?",
             (start_id, end_id),
         )
-        return cursor.fetchone()["count"]
+        count: int = cursor.fetchone()["count"]
+        return count
 
     def count_content_blocks(self) -> int:
         """Count total number of content blocks.
@@ -1093,8 +1095,8 @@ class Database:
             raise RuntimeError("Database not connected")
 
         cursor = self.conn.execute("SELECT COUNT(*) as count FROM content")
-        row = cursor.fetchone()
-        return row["count"]
+        count: int = cursor.fetchone()["count"]
+        return count
 
     def count_references(self) -> int:
         """Count total number of reference index entries.
@@ -1107,8 +1109,8 @@ class Database:
             raise RuntimeError("Database not connected")
 
         cursor = self.conn.execute("SELECT COUNT(*) as count FROM reference_index")
-        row = cursor.fetchone()
-        return row["count"]
+        count: int = cursor.fetchone()["count"]
+        return count
 
     def count_milestones(self) -> int:
         """Count milestone entries.
@@ -1123,7 +1125,8 @@ class Database:
             "SELECT COUNT(*) as count FROM milestone WHERE type != ?",
             (DOCUMENT_MILESTONE,),
         )
-        return cursor.fetchone()["count"]
+        count: int = cursor.fetchone()["count"]
+        return count
 
     def count_milestones_by_type(self) -> dict[str, int]:
         """Count the values recorded for each milestone type.
@@ -1152,4 +1155,5 @@ class Database:
             raise RuntimeError("Database not connected")
 
         cursor = self.conn.execute("SELECT COUNT(*) as count FROM commentary_scope")
-        return cursor.fetchone()["count"]
+        count: int = cursor.fetchone()["count"]
+        return count

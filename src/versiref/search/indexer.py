@@ -5,7 +5,7 @@ import os
 import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from versiref import RefParser, RefStyle, Sensitivity, Versification
 
@@ -237,7 +237,7 @@ def index_document(
     try:
         vers = Versification.named(versification)
     except (FileNotFoundError, ValueError) as e:
-        raise ValueError(f"Invalid versification '{versification}': {e}")
+        raise ValueError(f"Invalid versification '{versification}': {e}") from e
 
     parser = RefParser(ref_style, vers)
 
@@ -498,7 +498,7 @@ def index_documents(
         building.unlink(missing_ok=True)
 
 
-def get_index_stats(db_path: str | Path) -> dict:
+def get_index_stats(db_path: str | Path) -> dict[str, Any]:
     """Get statistics about an indexed database.
 
     Args:

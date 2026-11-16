@@ -72,7 +72,7 @@ def test_missing_db_raises(tmp_path, ref_style):
 
 
 def test_invalid_reference_raises(indexed_db, ref_style):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="reference query 'NotABook 99:99'"):
         search_database(indexed_db, ref_style, reference_query="NotABook 99:99")
 
 
@@ -616,7 +616,8 @@ def test_search_results_page_none_before_first_milestone(paged_search_db, ref_st
 
 def test_search_results_page_none_without_milestones(indexed_db, ref_style):
     results = search_database(indexed_db, ref_style, reference_query="Lk 1:28")
-    assert results and all(r.page is None for r in results)
+    assert results
+    assert all(r.page is None for r in results)
 
 
 def test_get_page_context_returns_page_blocks(paged_search_db):
@@ -811,7 +812,7 @@ def test_search_commentary_no_scopes(indexed_db, ref_style):
 
 
 def test_search_commentary_invalid_query_raises(commentary_search_db, ref_style):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="reference query"):
         search_commentary(commentary_search_db, ref_style, "Not A Reference 12:99x")
 
 
@@ -1076,7 +1077,7 @@ def test_page_recorded_in_two_documents_is_ambiguous(two_document_db):
 
 def test_start_id_chooses_among_ambiguous_pages(two_document_db):
     blocks = get_page_context(two_document_db, "5", start_id=6, include_headings=False)
-    assert [b.id for b in blocks][0] == 6
+    assert blocks[0].id == 6
     with pytest.raises(ValueError, match="at or after block 7"):
         get_page_context(two_document_db, "5", start_id=7)
 
@@ -1092,7 +1093,7 @@ def test_section_stops_at_the_document_boundary(two_document_db):
 
 
 def test_section_lookup_does_not_reach_into_earlier_document(two_document_db):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="No heading at level 2 or above"):
         get_section_by_block(two_document_db, block_id=5, level=2)
 
 

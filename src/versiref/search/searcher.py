@@ -157,7 +157,7 @@ def _parse_query_reference(
     try:
         ref = parser.parse(reference_query, silent=False)
     except Exception as e:
-        raise ValueError(f"Invalid reference query '{reference_query}': {e}")
+        raise ValueError(f"Invalid reference query '{reference_query}': {e}") from e
 
     if ref is None:
         raise ValueError(f"Could not parse reference query '{reference_query}'")
@@ -289,7 +289,7 @@ def search_database(
                     f"'{string_query}' is not a valid FTS5 search expression "
                     f"({e}); to search for the text as written, use a phrase "
                     "search (--phrase) instead"
-                )
+                ) from e
             for content_id, highlighted_text in string_results:
                 if content_id not in string_blocks:
                     string_blocks[content_id] = highlighted_text

@@ -27,11 +27,18 @@ uv build
 uv run python
 ```
 
-### Type Checking
+### Type Checking and Linting
 ```bash
-# Run mypy for type checking
+# Run mypy for type checking (strict mode)
 uv run mypy src/
+
+# Lint and format
+uv run ruff check
+uv run ruff format
 ```
+
+The mypy and ruff settings follow versiref's: strict mypy, and the D, E, W, F, I, B, UP, SIM, C4, PT, and RUF rule sets.
+Two things differ because this package needs them: the mypy namespace-package settings, and the exemption of tests from the docstring rules D101–D103.
 
 ### Testing
 Tests live in `tests/`. Run with:
