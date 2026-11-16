@@ -534,29 +534,3 @@ def test_count_scopes(db):
     assert db.count_scopes() == 0
     db.insert_scope(1, 2, 4300800700, 4300800700)
     assert db.count_scopes() == 1
-
-
-# --- Graceful degradation when optional tables are absent ---
-
-
-@pytest.fixture
-def legacy_db(db_with_blocks):
-    """Simulate a database lacking the milestone and commentary_scope tables."""
-    db_with_blocks.conn.execute("DROP TABLE milestone")
-    db_with_blocks.conn.execute("DROP TABLE commentary_scope")
-    db_with_blocks.conn.commit()
-    return db_with_blocks
-
-
-def test_legacy_db_milestone_queries_return_empty(legacy_db):
-    assert legacy_db.get_milestone_for_block(1, "page") is None
-    assert legacy_db.get_milestone_range("page", "53") is None
-    assert legacy_db.get_milestone_values("page") == []
-    assert legacy_db.get_milestones_in_range(1, 4) == {}
-    assert legacy_db.get_last_milestone_in_range("page", 1, 4) is None
-    assert legacy_db.count_milestones() == 0
-
-
-def test_legacy_db_scope_queries_return_empty(legacy_db):
-    assert legacy_db.search_scopes(4300800700, 4300800700) == []
-    assert legacy_db.count_scopes() == 0

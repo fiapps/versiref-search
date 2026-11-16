@@ -26,8 +26,7 @@ PRODUCT_NAME = "versiref-search"
 #
 # SCHEMA_VERSION is what new databases are stamped with at index time;
 # REQUIRED_SCHEMA_VERSION is the oldest schema this code can read. They
-# differ when new tables are optional at query time (queries against the
-# new tables return empty results on older databases).
+# differ when what a newer schema adds is optional at query time.
 #
 # Version 2.1 adds two conventions to the milestone table, with no change to
 # its layout. A milestone of type DOCUMENT_MILESTONE marks the first block of
@@ -345,20 +344,6 @@ class Database:
         assert cursor.lastrowid is not None
         return cursor.lastrowid
 
-    def _table_exists(self, name: str) -> bool:
-        """Return True if a table exists in this database.
-
-        Used to degrade gracefully on databases created before a table was
-        added to the schema (schema 1.0 lacks milestone/commentary_scope).
-        """
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-
-        cursor = self.conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
-        )
-        return cursor.fetchone() is not None
-
     def insert_milestone(
         self, type: str, value: str, content_id: int, char_offset: int
     ) -> int:
@@ -406,14 +391,11 @@ class Database:
 
         Returns:
             Milestone value, or None if no milestone of this type is in
-            effect at the position (including databases without a milestone
-            table).
+            effect at the position.
 
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("milestone"):
-            return None
 
         cursor = self.conn.execute(
             """SELECT value FROM milestone
@@ -450,8 +432,6 @@ class Database:
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("milestone"):
-            return None
 
         cursor = self.conn.execute(
             "SELECT MAX(content_id) AS id FROM milestone "
@@ -474,8 +454,6 @@ class Database:
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("milestone"):
-            return None
 
         cursor = self.conn.execute(
             "SELECT MIN(content_id) AS id FROM milestone "
@@ -498,8 +476,6 @@ class Database:
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("milestone"):
-            return None
 
         cursor = self.conn.execute(
             """SELECT value FROM milestone
@@ -528,14 +504,11 @@ class Database:
 
         Returns:
             Mapping of content ID to its milestones in document order. Blocks
-            with no milestones are absent; empty on databases without a
-            milestone table.
+            with no milestones are absent.
 
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("milestone"):
-            return {}
 
         placeholders = ", ".join("?" for _ in types)
         cursor = self.conn.execute(
@@ -568,13 +541,11 @@ class Database:
 
         Returns:
             Milestone value, or None if the range holds no milestone of this
-            type (including databases without a milestone table).
+            type.
 
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("milestone"):
-            return None
 
         cursor = self.conn.execute(
             """SELECT value FROM milestone
@@ -598,13 +569,11 @@ class Database:
 
         Returns:
             Content IDs holding a milestone with this value, in document
-            order. Empty on databases without a milestone table.
+            order.
 
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("milestone"):
-            return []
 
         cursor = self.conn.execute(
             """SELECT DISTINCT content_id FROM milestone
@@ -631,14 +600,11 @@ class Database:
                 this content ID, rather than the first in the database
 
         Returns:
-            Tuple of (start_id, end_id), or None if no such milestone
-            (including databases without a milestone table).
+            Tuple of (start_id, end_id), or None if no such milestone.
 
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("milestone"):
-            return None
 
         cursor = self.conn.execute(
             """SELECT content_id, char_offset FROM milestone
@@ -681,14 +647,11 @@ class Database:
             milestone_type: Milestone type to look up (e.g. "page", "marg")
 
         Returns:
-            List of values in document order, without end markers. Empty on
-            databases without a milestone table.
+            List of values in document order, without end markers.
 
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("milestone"):
-            return []
 
         cursor = self.conn.execute(
             """SELECT value FROM milestone
@@ -736,14 +699,11 @@ class Database:
 
         Returns:
             List of tuples: (id, block_start, block_end, verse_start,
-            verse_end), ordered by block_start then block_end. Empty on
-            databases without a commentary_scope table.
+            verse_end), ordered by block_start then block_end.
 
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("commentary_scope"):
-            return []
 
         cursor = self.conn.execute(
             """SELECT id, block_start, block_end, verse_start, verse_end
@@ -1143,15 +1103,13 @@ class Database:
         return row["count"]
 
     def count_milestones(self) -> int:
-        """Count milestone entries (0 on databases without the table).
+        """Count milestone entries.
 
         Document boundaries share the table but are not counted: they are
         recorded by the indexer, not written in the source.
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("milestone"):
-            return 0
 
         cursor = self.conn.execute(
             "SELECT COUNT(*) as count FROM milestone WHERE type != ?",
@@ -1165,14 +1123,11 @@ class Database:
         Returns:
             Mapping of milestone type (e.g. "page", "marg") to the number of
             values recorded, for the types the database has any of. Document
-            boundaries and end markers are not values and are left out. Empty
-            on databases without a milestone table.
+            boundaries and end markers are not values and are left out.
 
         """
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("milestone"):
-            return {}
 
         cursor = self.conn.execute(
             """SELECT type, COUNT(*) AS count FROM milestone
@@ -1184,11 +1139,9 @@ class Database:
         return {row["type"]: row["count"] for row in cursor.fetchall()}
 
     def count_scopes(self) -> int:
-        """Count commentary scope entries (0 on databases without the table)."""
+        """Count commentary scope entries."""
         if not self.conn:
             raise RuntimeError("Database not connected")
-        if not self._table_exists("commentary_scope"):
-            return 0
 
         cursor = self.conn.execute("SELECT COUNT(*) as count FROM commentary_scope")
         return cursor.fetchone()["count"]
