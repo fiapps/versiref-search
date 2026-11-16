@@ -322,7 +322,7 @@ versiref-search info mybook.db
 ```
 
 This shows the title, versification scheme, and other metadata, along with block and reference counts.
-Databases with milestones or commentary scopes also report those counts.
+Databases with milestones report how many of each type they record (`page milestones: 312`, `marg milestones: 48`), and those with commentary scopes report that count too.
 
 ## Options Reference
 

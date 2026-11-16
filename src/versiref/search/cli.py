@@ -227,8 +227,8 @@ def index(
         click.echo(f"✓ Successfully indexed to {output_file}")
         click.echo(f"  Blocks: {stats['block_count']}")
         click.echo(f"  References: {stats['reference_count']}")
-        if stats["milestone_count"]:
-            click.echo(f"  Milestones: {stats['milestone_count']}")
+        for milestone_type, count in stats["milestone_counts"].items():
+            click.echo(f"  {milestone_type.capitalize()} milestones: {count}")
         if stats["scope_count"]:
             click.echo(f"  Commentary scopes: {stats['scope_count']}")
         click.echo(f"  Title: {stats['metadata'].get('title', 'N/A')}")
@@ -488,8 +488,8 @@ def info(databases: tuple[Path, ...]) -> None:
                 click.echo(f"  {key}: {value}")
             click.echo(f"  blocks: {stats['block_count']}")
             click.echo(f"  references: {stats['reference_count']}")
-            if stats["milestone_count"]:
-                click.echo(f"  milestones: {stats['milestone_count']}")
+            for milestone_type, count in stats["milestone_counts"].items():
+                click.echo(f"  {milestone_type} milestones: {count}")
             if stats["scope_count"]:
                 click.echo(f"  commentary scopes: {stats['scope_count']}")
     except FileNotFoundError as e:

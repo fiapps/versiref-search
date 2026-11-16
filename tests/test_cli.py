@@ -806,3 +806,22 @@ def test_show_page_stops_at_document_end(tmp_path):
     assert result.exit_code == 0
     assert "Doc A page six" in result.output
     assert "Doc B" not in result.output
+
+
+def test_info_lists_milestones_by_type(tmp_path):
+    content = (
+        "<!-- page: 1 -->\n<!-- marg: 7 -->\nOne.\n\n"
+        "<!-- page: 2 -->\nTwo.\n\n<!-- page: end -->\nNote.\n"
+    )
+    db = _make_db(tmp_path, "typed", content, "Typed")
+    result = CliRunner().invoke(main, ["info", str(db)])
+    assert result.exit_code == 0
+    assert "page milestones: 2" in result.output
+    assert "marg milestones: 1" in result.output
+
+
+def test_info_names_the_only_milestone_type(tmp_path):
+    db = _make_db(tmp_path, "paged", PAGED_MD, "Paged")
+    result = CliRunner().invoke(main, ["info", str(db)])
+    assert "page milestones:" in result.output
+    assert "marg" not in result.output

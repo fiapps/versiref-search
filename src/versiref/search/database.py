@@ -1151,6 +1151,30 @@ class Database:
         )
         return cursor.fetchone()["count"]
 
+    def count_milestones_by_type(self) -> dict[str, int]:
+        """Count the values recorded for each milestone type.
+
+        Returns:
+            Mapping of milestone type (e.g. "page", "marg") to the number of
+            values recorded, for the types the database has any of. Document
+            boundaries and end markers are not values and are left out. Empty
+            on databases without a milestone table.
+
+        """
+        if not self.conn:
+            raise RuntimeError("Database not connected")
+        if not self._table_exists("milestone"):
+            return {}
+
+        cursor = self.conn.execute(
+            """SELECT type, COUNT(*) AS count FROM milestone
+               WHERE type != ? AND value != ?
+               GROUP BY type
+               ORDER BY type""",
+            (DOCUMENT_MILESTONE, MILESTONE_END),
+        )
+        return {row["type"]: row["count"] for row in cursor.fetchall()}
+
     def count_scopes(self) -> int:
         """Count commentary scope entries (0 on databases without the table)."""
         if not self.conn:

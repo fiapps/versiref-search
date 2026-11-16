@@ -407,7 +407,9 @@ def get_index_stats(db_path: str | Path) -> dict:
 
     Returns:
         Dictionary with statistics (block_count, reference_count,
-        milestone_count, scope_count, metadata)
+        milestone_count, milestone_counts, scope_count, metadata).
+        ``milestone_counts`` maps each milestone type the database uses to
+        the number of values recorded for it.
 
     Raises:
         FileNotFoundError: If database doesn't exist
@@ -425,6 +427,7 @@ def get_index_stats(db_path: str | Path) -> dict:
             "block_count": db.count_content_blocks(),
             "reference_count": db.count_references(),
             "milestone_count": db.count_milestones(),
+            "milestone_counts": db.count_milestones_by_type(),
             "scope_count": db.count_scopes(),
             "metadata": db.get_all_metadata(),
         }
