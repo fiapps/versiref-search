@@ -1161,3 +1161,67 @@ def test_get_date_context_missing_date_hints_neighbors(dated_db):
 
     with pytest.raises(ValueError, match="between recorded dates"):
         get_date_context(dated_db, "1900-01-01")
+
+
+# --- NABRE lettered chapters of Esther ---
+
+
+@pytest.fixture
+def nabre_esther_db(tmp_path, ref_style):
+    """Index NABRE citations of Esther's lettered and numbered chapters.
+
+    Block layout:
+      1  # Esther            (h1)
+      2  cites Esth C:1-11   (Mordecai's prayer)
+      3  cites Esth 3:13
+      4  cites Esth C:12-30  (Esther's prayer)
+      5  cites Esth 1:1
+      6  cites Job 1:1
+    """
+    md = tmp_path / "esther.md"
+    md.write_text(
+        "# Esther\n\n"
+        "Mordecai prays in Esth C:1-11.\n\n"
+        "The edict of Esth 3:13.\n\n"
+        "Esther's prayer, Esth C:12-30.\n\n"
+        "The first chapter, Esth 1:1.\n\n"
+        "Then Job 1:1.\n",
+        encoding="utf-8",
+    )
+    db = tmp_path / "esther.db"
+    index_document(
+        input_path=md,
+        output_path=db,
+        metadata={"title": "Esther", "versification": "nabre", "lang": "en"},
+        ref_style=ref_style,
+    )
+    return db
+
+
+def _hit_ids(db, ref_style, query):
+    return [r.block_id for r in search_database(db, ref_style, reference_query=query)]
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        # A verse of a lettered chapter finds the range that holds it.
+        ("Esth C:5", [2]),
+        ("Esth C:20", [4]),
+        # A whole lettered chapter finds every range within it.
+        ("Esth C", [2, 4]),
+        # A range may pass from a numbered chapter into a lettered one.
+        ("Esth 4:17-C:3", [2]),
+        # Chapter 4 ends at 4:17 and leaves out C, which follows it.
+        ("Esth 4", []),
+        # The whole book takes in the lettered chapters.
+        ("Esth", [2, 3, 4, 5]),
+        # A lettered chapter is not confused with a numbered one.
+        ("Esth 1", [5]),
+        ("Esth 3", [3]),
+        # Books after Esther keep their own keys.
+        ("Job 1", [6]),
+    ],
+)
+def test_nabre_lettered_chapters(nabre_esther_db, ref_style, query, expected):
+    assert _hit_ids(nabre_esther_db, ref_style, query) == expected

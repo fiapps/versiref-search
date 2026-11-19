@@ -102,13 +102,13 @@ def test_validate_schema_unparseable_version_raises(db):
 
 
 def test_validate_schema_accepts_newer_minor(db):
-    # A 2.1 database satisfies code written against 2.0 (additive changes).
-    _mark(db, version="2.1")
+    # A 3.1 database satisfies code written against 3.0 (additive changes).
+    _mark(db, version="3.1")
     db.validate_schema()
 
 
 def test_validate_schema_rejects_newer_major(db):
-    _mark(db, version="3.0")
+    _mark(db, version="4.0")
     with pytest.raises(IncompatibleDatabaseError, match="incompatible"):
         db.validate_schema()
 
@@ -121,10 +121,19 @@ def test_validate_schema_rejects_older_major(db):
         db.validate_schema()
 
 
+@pytest.mark.parametrize("version", ["2.0", "2.1"])
+def test_validate_schema_rejects_2x(db, version):
+    # 2.x databases may hold verse keys from before versiref 0.14.0, which
+    # re-keyed the NABRE and Esther's Addition A in lxx and cei.
+    _mark(db, version=version)
+    with pytest.raises(IncompatibleDatabaseError, match="re-index"):
+        db.validate_schema()
+
+
 def test_validate_schema_rejects_older_minor(db, monkeypatch):
-    # Code requiring 2.1 must reject a 2.0 database that lacks the additions.
-    monkeypatch.setattr("versiref.search.database.REQUIRED_SCHEMA_VERSION", "2.1")
-    _mark(db, version="2.0")
+    # Code requiring 3.1 must reject a 3.0 database that lacks the additions.
+    monkeypatch.setattr("versiref.search.database.REQUIRED_SCHEMA_VERSION", "3.1")
+    _mark(db, version="3.0")
     with pytest.raises(IncompatibleDatabaseError, match="incompatible"):
         db.validate_schema()
 

@@ -34,8 +34,14 @@ PRODUCT_NAME = "versiref-search"
 # at the document they belong to; and a page or marg milestone whose value is
 # MILESTONE_END says that no value is in effect from that point on. A 2.0
 # database has neither and is read as before.
-SCHEMA_VERSION = "2.1"
-REQUIRED_SCHEMA_VERSION = "2.0"
+#
+# Version 3.0 keeps the 2.1 table layout and conventions but, like 2.0,
+# reinterprets the verse keys. versiref 0.14.0 re-keyed the NABRE (its lettered
+# chapters of Esther became inserted verses of EST, moving every later book down
+# one number) and the position of Addition A to Esther in lxx and cei. 2.x
+# databases do not record which versiref built them, so all are rejected.
+SCHEMA_VERSION = "3.0"
+REQUIRED_SCHEMA_VERSION = "3.0"
 
 # Milestone type marking the first block of a source document. Its value is
 # the document's file name. It cannot be written in a source document, where

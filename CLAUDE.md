@@ -108,7 +108,7 @@ The system uses SQLite databases (one per index, built from one or more source d
 6. **metadata**: Key-value pairs (title, lang, author, etc.)
    - `format`, `schema_version`, and `versification_scheme` are written by the indexer and cannot be set from a metadata file
 
-The schema version (`SCHEMA_VERSION` in `database.py`, currently 2.1) is independent of the package version.
+The schema version (`SCHEMA_VERSION` in `database.py`, currently 3.0) is independent of the package version.
 A minor bump is additive; a major bump rejects older databases and requires re-indexing.
 
 ### Verse Encoding
@@ -152,7 +152,7 @@ This allows searching for "Isaiah 7:14" to match documents citing "Isaiah 7:7-16
 
 ## Key Dependencies
 
-- **versiref** (>=0.13.0): For parsing and manipulating Bible references
+- **versiref** (>=0.14.0): For parsing and manipulating Bible references
 - **click** (>=8.1.0): CLI framework
 - **mistune** (>=3.0.0): Markdown parsing
 - **pyyaml** (>=6.0.3): Metadata, config, and frontmatter

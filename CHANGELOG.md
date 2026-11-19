@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- Requires versiref 0.14.0, which reads the NABRE's lettered chapters of Esther as part of Esther, so that "Est 4:1–C:30" and "Est B:1; 3:14" are indexed and searched as written.
+- New databases carry schema version 3.0, and databases from earlier versions must be re-indexed. versiref 0.14.0 numbers verses differently for the NABRE, and for Addition A to Esther in the LXX and CEI, so an older database would quietly miss or mismatch references; it is refused with a message to re-index instead.
+
 ### Fixed
 
 - Indexing no longer warns that `<!-- margin: ... -->`, `<!-- mark: ... -->`, `<!-- data: ... -->`, and `<!-- update: ... -->` comments look like misspelled milestones. These are ordinary words that an author may use on purpose, as a corpus that keeps its marginal notes in `margin` comments does.
